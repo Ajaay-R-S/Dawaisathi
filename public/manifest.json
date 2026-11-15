@@ -1,0 +1,25 @@
+{
+  "name": "DawaiSaathi (दवाई साथी) - Medicine Buddy",
+  "short_name": "DawaiSaathi",
+  "description": "Easy, Safe & Smart Healthcare companion for families and elders. Prescription OCR, drug interaction checker, Jan Aushadhi generic alternatives, local voice reminder timetable, and health safety loop.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f8fafc",
+  "theme_color": "#16a34a",
+  "lang": "hi",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
