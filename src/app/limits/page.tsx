@@ -13,28 +13,21 @@ import {
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import { getPatientProfile } from '@/lib/supabase';
-import { Language, PatientProfile } from '@/types';
-import { TRANSLATIONS } from '@/data/translations';
+import { PatientProfile } from '@/types';
 
 export default function LimitsPage() {
   const [patient, setPatient] = useState<PatientProfile | null>(null);
-  const [language, setLanguage] = useState<Language>('hi');
   const [isDemoMode, setIsDemoMode] = useState<boolean>(true);
-
-  const t = TRANSLATIONS[language] || TRANSLATIONS.en;
 
   useEffect(() => {
     getPatientProfile().then((p) => {
       setPatient(p);
-      if (p.preferred_language) setLanguage(p.preferred_language);
     });
   }, []);
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
       <Navbar
-        currentLang={language}
-        onLanguageChange={setLanguage}
         isDemoMode={isDemoMode}
         onToggleDemoMode={() => setIsDemoMode(!isDemoMode)}
         emergencyPhone={patient?.emergency_contact_phone}
