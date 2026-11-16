@@ -8,10 +8,6 @@ import {
   Check,
   Bell,
   Volume2,
-  Calendar as CalendarIcon,
-  Clock,
-  Sparkles,
-  Award,
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import SpeechPlayer from '@/components/SpeechPlayer';
@@ -20,42 +16,44 @@ import {
   getDailySchedule,
   toggleScheduleItem,
   getPatientProfile,
-  savePatientProfile,
 } from '@/lib/supabase';
 import { speakText } from '@/lib/speech';
-import { ScheduleItem, PatientProfile, Language, Slot } from '@/types';
-import { TRANSLATIONS } from '@/data/translations';
+import { ScheduleItem, PatientProfile } from '@/types';
+import { useLanguage, Language } from '@/context/LanguageContext';
 
 export default function SchedulePage() {
+  const { language, t, formatNumber, formatTime } = useLanguage();
   const [patient, setPatient] = useState<PatientProfile | null>(null);
-  const [language, setLanguage] = useState<Language>('hi');
   const [isDemoMode, setIsDemoMode] = useState<boolean>(true);
   const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
   const [voiceScript, setVoiceScript] = useState<string>('');
   const [isScriptLoading, setIsScriptLoading] = useState<boolean>(false);
   const [notificationEnabled, setNotificationEnabled] = useState<boolean>(false);
 
-  const t = TRANSLATIONS[language] || TRANSLATIONS.en;
-
   useEffect(() => {
     loadData();
-    // Check notification permission
     if (typeof window !== 'undefined' && 'Notification' in window) {
       setNotificationEnabled(Notification.permission === 'granted');
     }
   }, []);
 
+  // When language changes, re-fetch voice script in the new language
+  useEffect(() => {
+    if (schedule.length > 0) {
+      generateVoiceScript(schedule, language);
+    }
+  }, [language]);
+
   const loadData = async () => {
     const p = await getPatientProfile();
     setPatient(p);
-    if (p.preferred_language) setLanguage(p.preferred_language);
 
     const sched = await getDailySchedule();
     setSchedule(sched);
-    generateVoiceScript(sched, p.preferred_language || 'hi');
+    generateVoiceScript(sched, language);
   };
 
-  const generateVoiceScript = async (items: ScheduleItem[], lang: Language) => {
+  const generateVoiceScript = async (items: ScheduleItem[], targetLang: Language) => {
     setIsScriptLoading(true);
     try {
       const res = await fetch('/api/voice-script', {
@@ -63,9 +61,9 @@ export default function SchedulePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           schedule: items,
-          language: lang,
+          language: targetLang,
           isDemo: isDemoMode,
-          patientName: patient?.full_name || 'बाबा',
+          patientName: patient?.full_name || 'Patient',
         }),
       });
       const data = await res.json();
@@ -79,25 +77,12 @@ export default function SchedulePage() {
     }
   };
 
-  const handleLanguageChange = (lang: Language) => {
-    setLanguage(lang);
-    if (patient) {
-      savePatientProfile({ preferred_language: lang });
-    }
-    generateVoiceScript(schedule, lang);
-  };
-
   const handleToggleTaken = async (id: string, currentTaken: boolean) => {
     const updated = await toggleScheduleItem(id, !currentTaken);
     setSchedule(updated);
 
-    // If turned on, speak positive reinforcement
     if (!currentTaken) {
-      const positiveWords =
-        language === 'hi'
-          ? 'शाबाश! आपने दवा ले ली।'
-          : 'Good job! Medicine marked as taken.';
-      speakText(positiveWords, language);
+      speakText(t('schedule.wellDoneTaken'), language);
     }
   };
 
@@ -111,15 +96,14 @@ export default function SchedulePage() {
       const perm = await Notification.requestPermission();
       if (perm === 'granted') {
         setNotificationEnabled(true);
-        new Notification('दवाई साथी (DawaiSaathi)', {
-          body: 'दवा के समय पर आपको याद दिलाया जाएगा! (Reminders Active)',
+        new Notification(t('schedule.notificationTitle'), {
+          body: t('schedule.notificationBody'),
           icon: '/favicon.ico',
         });
       }
     }
   };
 
-  // Group by slots
   const morningList = schedule.filter((s) => s.slot === 'morning');
   const afternoonList = schedule.filter((s) => s.slot === 'afternoon');
   const nightList = schedule.filter((s) => s.slot === 'night');
@@ -127,8 +111,6 @@ export default function SchedulePage() {
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
       <Navbar
-        currentLang={language}
-        onLanguageChange={handleLanguageChange}
         isDemoMode={isDemoMode}
         onToggleDemoMode={() => setIsDemoMode(!isDemoMode)}
         emergencyPhone={patient?.emergency_contact_phone}
@@ -140,13 +122,13 @@ export default function SchedulePage() {
         <div className="bg-white rounded-3xl p-5 sm:p-7 border-2 border-emerald-100 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <span className="text-xs font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-              Feature 4 & 5: Voice + Timetable
+              {t('schedule.badge')}
             </span>
             <h1 className="text-2xl sm:text-3xl font-black text-gray-900 mt-1">
-              {t.homeButtons.todaySchedule}
+              {t('schedule.title')}
             </h1>
             <p className="text-sm text-gray-500 font-semibold mt-0.5">
-              सुबह, दोपहर और रात की दवाएं देखें और आवाज में सुनें।
+              {t('schedule.subtitle')}
             </p>
           </div>
 
@@ -161,17 +143,14 @@ export default function SchedulePage() {
           >
             <Bell className="w-4 h-4" />
             <span>
-              {notificationEnabled ? 'रिमाइंडर चालू है ✓' : 'रिमाइंडर चालू करें (Alerts)'}
+              {notificationEnabled ? t('schedule.alertsActive') : t('schedule.enableAlerts')}
             </span>
           </button>
         </div>
 
-        {/* ------------------------------------------------------------- */}
-        {/* VOICE EXPLANATION IN LOCAL LANGUAGE (Web Speech API + Play)   */}
-        {/* ------------------------------------------------------------- */}
+        {/* VOICE EXPLANATION IN LOCAL LANGUAGE */}
         <SpeechPlayer
           textToSpeak={voiceScript}
-          language={language}
           onRefreshScript={() => generateVoiceScript(schedule, language)}
           isLoading={isScriptLoading}
         />
@@ -182,9 +161,7 @@ export default function SchedulePage() {
           schedule={schedule}
         />
 
-        {/* ------------------------------------------------------------- */}
-        {/* DAILY SCHEDULE BY SLOTS (Morning, Afternoon, Night)           */}
-        {/* ------------------------------------------------------------- */}
+        {/* DAILY SCHEDULE BY SLOTS */}
         <div className="space-y-6">
           {/* MORNING SLOT */}
           <div className="bg-white rounded-3xl p-5 sm:p-7 border-2 border-amber-100 shadow-sm space-y-4">
@@ -195,22 +172,25 @@ export default function SchedulePage() {
                 </div>
                 <div>
                   <h3 className="text-xl sm:text-2xl font-black text-gray-900">
-                    सुबह (Morning)
+                    {t('schedule.morningTitle')}
                   </h3>
                   <p className="text-xs text-gray-500 font-semibold">
-                    नाश्ते से पहले व बाद की दवाएं
+                    {t('schedule.morningSub')}
                   </p>
                 </div>
               </div>
               <span className="text-xs font-bold text-amber-800 bg-amber-50 px-3 py-1 rounded-full border border-amber-200">
-                {morningList.filter((m) => m.taken).length} / {morningList.length} ली गई
+                {t('schedule.slotTakenCount', {
+                  taken: formatNumber(morningList.filter((m) => m.taken).length),
+                  total: formatNumber(morningList.length),
+                })}
               </span>
             </div>
 
             <div className="space-y-3">
               {morningList.length === 0 ? (
                 <p className="text-sm text-gray-400 italic py-2">
-                  सुबह के लिए कोई दवा निर्धारित नहीं है।
+                  {t('schedule.emptyMorning')}
                 </p>
               ) : (
                 morningList.map((item) => (
@@ -234,22 +214,25 @@ export default function SchedulePage() {
                 </div>
                 <div>
                   <h3 className="text-xl sm:text-2xl font-black text-gray-900">
-                    दोपहर (Afternoon)
+                    {t('schedule.afternoonTitle')}
                   </h3>
                   <p className="text-xs text-gray-500 font-semibold">
-                    दोपहर के खाने के बाद की दवाएं
+                    {t('schedule.afternoonSub')}
                   </p>
                 </div>
               </div>
               <span className="text-xs font-bold text-orange-800 bg-orange-50 px-3 py-1 rounded-full border border-orange-200">
-                {afternoonList.filter((m) => m.taken).length} / {afternoonList.length} ली गई
+                {t('schedule.slotTakenCount', {
+                  taken: formatNumber(afternoonList.filter((m) => m.taken).length),
+                  total: formatNumber(afternoonList.length),
+                })}
               </span>
             </div>
 
             <div className="space-y-3">
               {afternoonList.length === 0 ? (
                 <p className="text-sm text-gray-400 italic py-2">
-                  दोपहर के लिए कोई दवा निर्धारित नहीं है।
+                  {t('schedule.emptyAfternoon')}
                 </p>
               ) : (
                 afternoonList.map((item) => (
@@ -273,22 +256,25 @@ export default function SchedulePage() {
                 </div>
                 <div>
                   <h3 className="text-xl sm:text-2xl font-black text-gray-900">
-                    रात (Night / Bedtime)
+                    {t('schedule.nightTitle')}
                   </h3>
                   <p className="text-xs text-gray-500 font-semibold">
-                    रात के खाने व सोने से पहले की दवाएं
+                    {t('schedule.nightSub')}
                   </p>
                 </div>
               </div>
               <span className="text-xs font-bold text-indigo-800 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-200">
-                {nightList.filter((m) => m.taken).length} / {nightList.length} ली गई
+                {t('schedule.slotTakenCount', {
+                  taken: formatNumber(nightList.filter((m) => m.taken).length),
+                  total: formatNumber(nightList.length),
+                })}
               </span>
             </div>
 
             <div className="space-y-3">
               {nightList.length === 0 ? (
                 <p className="text-sm text-gray-400 italic py-2">
-                  रात के लिए कोई दवा निर्धारित नहीं है।
+                  {t('schedule.emptyNight')}
                 </p>
               ) : (
                 nightList.map((item) => (
@@ -315,6 +301,8 @@ interface ScheduleItemCardProps {
 }
 
 function ScheduleItemCard({ item, onToggle, onSpeak }: ScheduleItemCardProps) {
+  const { t } = useLanguage();
+
   return (
     <div
       className={`p-4 sm:p-5 rounded-2xl border-2 flex items-center justify-between gap-3 transition-all ${
@@ -324,7 +312,7 @@ function ScheduleItemCard({ item, onToggle, onSpeak }: ScheduleItemCardProps) {
       }`}
     >
       <div className="flex items-center gap-3 sm:gap-4 flex-1">
-        {/* Big Checkbox for Elderly Fingers */}
+        {/* Big Checkbox */}
         <button
           onClick={onToggle}
           className={`w-9 h-9 sm:w-11 sm:h-11 rounded-2xl flex items-center justify-center transition shadow-sm active:scale-90 ${
@@ -332,7 +320,7 @@ function ScheduleItemCard({ item, onToggle, onSpeak }: ScheduleItemCardProps) {
               ? 'bg-emerald-600 text-white ring-4 ring-emerald-200'
               : 'border-2 border-gray-300 hover:border-emerald-500 bg-gray-50'
           }`}
-          aria-label={item.taken ? 'Mark not taken' : 'Mark taken'}
+          aria-label={item.taken ? t('common.verified') : t('common.verify')}
         >
           {item.taken && <Check className="w-6 h-6 stroke-[3]" />}
         </button>
@@ -358,11 +346,11 @@ function ScheduleItemCard({ item, onToggle, onSpeak }: ScheduleItemCardProps) {
 
           <div className="flex items-center gap-2 pt-0.5 text-xs text-gray-500">
             <span className="bg-amber-50 text-amber-900 font-semibold px-2 py-0.5 rounded border border-amber-200">
-              गोली: {item.color_shape_hint}
+              {t('schedule.pillHint')} {item.color_shape_hint}
             </span>
             {item.taken_at && (
               <span className="text-emerald-700 font-bold">
-                (ली गई: {item.taken_at})
+                {t('schedule.takenAt', { time: item.taken_at })}
               </span>
             )}
           </div>
@@ -373,8 +361,8 @@ function ScheduleItemCard({ item, onToggle, onSpeak }: ScheduleItemCardProps) {
       <button
         onClick={onSpeak}
         className="p-3 text-gray-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-xl transition shrink-0"
-        title="इस दवा के बारे में सुनें"
-        aria-label="Speak Medicine"
+        title={t('schedule.speakMedicineTitle')}
+        aria-label={t('schedule.speakMedicineTitle')}
       >
         <Volume2 className="w-5 h-5" />
       </button>

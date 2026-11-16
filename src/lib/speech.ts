@@ -1,11 +1,10 @@
-import { Language } from '@/types';
+import { Language } from '@/context/LanguageContext';
 
-// Map app language code to BCP 47 speech tags
 export const LANG_SPEECH_MAP: Record<Language, string> = {
+  en: 'en-IN',
   hi: 'hi-IN',
   ta: 'ta-IN',
   te: 'te-IN',
-  en: 'en-IN',
 };
 
 /**
@@ -26,16 +25,15 @@ export function isSpeechRecognitionSupported(): boolean {
 }
 
 /**
- * Speaks text using the browser's native Web Speech API
+ * Speaks text using the browser's native Web Speech API with strict language matching
  */
 export function speakText(
   text: string,
-  lang: Language = 'hi',
+  lang: Language = 'en',
   onEnd?: () => void,
   onError?: (err: any) => void
 ): SpeechSynthesisUtterance | null {
   if (!isSpeechSynthesisSupported()) {
-    console.warn('Speech synthesis not supported in this browser');
     onError?.('Speech synthesis not supported');
     return null;
   }
@@ -44,13 +42,16 @@ export function speakText(
   window.speechSynthesis.cancel();
 
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = LANG_SPEECH_MAP[lang] || 'en-IN';
-  utterance.rate = 0.9; // Slightly slower, clear rate for elderly ears
+  const targetTag = LANG_SPEECH_MAP[lang] || 'en-IN';
+  utterance.lang = targetTag;
+  utterance.rate = 0.9; // Clear rate for elderly ears
   utterance.pitch = 1.0;
 
-  // Attempt to select a native voice matching the language if available
+  // Try to find matching voice for language
   const voices = window.speechSynthesis.getVoices();
-  const matchedVoice = voices.find((v) => v.lang.startsWith(lang) || v.lang === utterance.lang);
+  const matchedVoice = voices.find(
+    (v) => v.lang === targetTag || v.lang.toLowerCase().startsWith(lang)
+  );
   if (matchedVoice) {
     utterance.voice = matchedVoice;
   }
@@ -78,16 +79,16 @@ export function stopSpeaking(): void {
 }
 
 /**
- * Starts listening to speech input via Web Speech Recognition
+ * Starts listening to speech input via Web Speech Recognition in the chosen language
  */
 export function startVoiceRecognition(
-  lang: Language = 'hi',
+  lang: Language = 'en',
   onResult: (transcript: string) => void,
   onError?: (error: any) => void,
   onEnd?: () => void
 ): any {
   if (!isSpeechRecognitionSupported()) {
-    onError?.('Speech recognition not supported in this browser. Please type reading.');
+    onError?.('Speech recognition not supported');
     return null;
   }
 
@@ -95,7 +96,7 @@ export function startVoiceRecognition(
     (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
   const recognition = new SpeechRecognition();
 
-  recognition.lang = LANG_SPEECH_MAP[lang] || 'hi-IN';
+  recognition.lang = LANG_SPEECH_MAP[lang] || 'en-IN';
   recognition.continuous = false;
   recognition.interimResults = false;
   recognition.maxAlternatives = 1;
@@ -108,7 +109,6 @@ export function startVoiceRecognition(
   };
 
   recognition.onerror = (event: any) => {
-    console.warn('Speech recognition error:', event.error);
     onError?.(event.error);
   };
 
@@ -130,14 +130,16 @@ export interface ParsedVitalsFromSpeech {
 }
 
 /**
- * Deterministically parses spoken utterances like:
- * "sugar 240", "fasting sugar 110", "BP 130 85", "blood pressure 140 over 90"
+ * Multi-lingual parser recognizing vitals spoken in English, Hindi, Tamil, or Telugu
  */
 export function parseSpokenVitals(rawText: string): ParsedVitalsFromSpeech | null {
   const text = rawText.toLowerCase().trim();
 
-  // 1. Check for BP patterns: "BP 130 80", "130/80", "140 over 90", "120 by 80"
-  const isBP = text.includes('bp') || text.includes('pressure') || text.includes('ब्लड प्रेशर') || text.includes('बीपी');
+  // 1. BP recognition across languages
+  const bpKeywords = ['bp', 'pressure', 'blood pressure', 'बीपी', 'ब्लड प्रेशर', 'இரத்த அழுத்தம்', 'ரத்த அழுத்தம்', 'రక్తపోటు', 'బీపీ'];
+  const isBP = bpKeywords.some((k) => text.includes(k));
+
+  // Regex pattern for 2 numbers e.g. "130/80", "130 over 80", "140 by 90", "130 80"
   const bpNumbers = text.match(/\b(\d{2,3})\s*(?:[/]|over|by|\s)\s*(\d{2,3})\b/);
 
   if (isBP || bpNumbers) {
@@ -156,26 +158,23 @@ export function parseSpokenVitals(rawText: string): ParsedVitalsFromSpeech | nul
     }
   }
 
-  // 2. Check for Sugar patterns: "sugar 240", "145 fasting", "shugar 180"
-  const isSugar =
-    text.includes('sugar') ||
-    text.includes('shugar') ||
-    text.includes('शुगर') ||
-    text.includes('glucose') ||
-    text.includes('डायबिटीज');
-
+  // 2. Sugar context across languages
   let meal_context: 'fasting' | 'post-meal' | 'random' = 'random';
-  if (text.includes('fasting') || text.includes('खाली पेट') || text.includes('morning')) {
+  const fastingKeywords = ['fasting', 'खाली पेट', 'சாப்பிடுவதற்கு முன்', 'ఖాళీ కడుపుతో', 'morning'];
+  const postMealKeywords = ['post', 'after', 'खाने के बाद', 'சாப்பிட்ட பின்', 'తిన్న తర్వాత', 'lunch', 'dinner'];
+
+  if (fastingKeywords.some((k) => text.includes(k))) {
     meal_context = 'fasting';
-  } else if (text.includes('post') || text.includes('after') || text.includes('खाने के बाद') || text.includes('lunch')) {
+  } else if (postMealKeywords.some((k) => text.includes(k))) {
     meal_context = 'post-meal';
   }
 
-  // Find 2 or 3 digit numbers in speech
-  const sugarNumbers = text.match(/\b(\d{2,3})\b/g);
-  if (sugarNumbers && sugarNumbers.length > 0) {
-    const candidate = parseInt(sugarNumbers[0], 10);
-    // Reasonable physiological sugar range
+  const sugarKeywords = ['sugar', 'shugar', 'glucose', 'diabetes', 'शुगर', 'சர்க்கரை', 'షుగర్'];
+  const isSugar = sugarKeywords.some((k) => text.includes(k));
+
+  const numbers = text.match(/\b(\d{2,3})\b/g);
+  if (numbers && numbers.length > 0) {
+    const candidate = parseInt(numbers[0], 10);
     if (candidate >= 40 && candidate <= 600) {
       return {
         type: 'sugar',

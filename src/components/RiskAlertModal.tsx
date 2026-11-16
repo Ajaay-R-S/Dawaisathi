@@ -1,8 +1,9 @@
 'use client';
 
 import React from 'react';
-import { AlertTriangle, PhoneCall, MessageCircle, X, ShieldAlert, CheckCircle2 } from 'lucide-react';
-import { RiskEvaluationResult, Language } from '@/types';
+import { AlertTriangle, PhoneCall, MessageCircle, X, ShieldAlert } from 'lucide-react';
+import { RiskEvaluationResult } from '@/types';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface RiskAlertModalProps {
   evaluation: RiskEvaluationResult | null;
@@ -10,17 +11,17 @@ interface RiskAlertModalProps {
   onClose: () => void;
   patientName?: string;
   emergencyPhone?: string;
-  language?: Language;
 }
 
 export default function RiskAlertModal({
   evaluation,
   isOpen,
   onClose,
-  patientName = 'Ram Prasad Sharma',
+  patientName = 'Patient',
   emergencyPhone = '+919876543210',
-  language = 'hi',
 }: RiskAlertModalProps) {
+  const { t } = useLanguage();
+
   if (!isOpen || !evaluation) return null;
 
   const isHighRisk = evaluation.risk_level === 'high';
@@ -45,7 +46,7 @@ export default function RiskAlertModal({
             </div>
             <div>
               <span className="text-xs font-black uppercase tracking-wider bg-black/20 px-2.5 py-0.5 rounded-full inline-block">
-                {isHighRisk ? 'गंभीर चेतावनी (CRITICAL ALERT)' : 'स्वास्थ्य चेतावनी (WARNING)'}
+                {isHighRisk ? t('common.danger') : t('common.warning')}
               </span>
               <h3 className="text-xl font-black mt-0.5">{evaluation.risk_title}</h3>
             </div>
@@ -53,7 +54,7 @@ export default function RiskAlertModal({
           <button
             onClick={onClose}
             className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-full"
-            aria-label="Close"
+            aria-label={t('common.close')}
           >
             <X className="w-6 h-6" />
           </button>
@@ -70,7 +71,7 @@ export default function RiskAlertModal({
           <div>
             <h4 className="text-sm font-black text-gray-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
               <ShieldAlert className="w-4 h-4 text-emerald-700" />
-              <span>तुरंत क्या करें (Next Steps):</span>
+              <span>{t('prescription.doctorNotesTitle')}:</span>
             </h4>
             <div className="space-y-2">
               {evaluation.action_steps.map((step, idx) => (
@@ -98,7 +99,7 @@ export default function RiskAlertModal({
                 className="w-full py-4 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-lg flex items-center justify-center gap-2 shadow-lg transition"
               >
                 <MessageCircle className="w-6 h-6" />
-                <span>परिवार को WhatsApp सूचना भेजें</span>
+                <span>{t('emergency.sendSosWhatsapp')}</span>
               </a>
             ) : null}
 
@@ -108,14 +109,14 @@ export default function RiskAlertModal({
               className="w-full py-3.5 px-6 rounded-2xl bg-red-600 hover:bg-red-700 active:scale-95 text-white font-bold text-base flex items-center justify-center gap-2 shadow transition"
             >
               <PhoneCall className="w-5 h-5" />
-              <span>108 राष्ट्रीय एम्बुलेंस पर कॉल करें</span>
+              <span>{t('emergency.call108Full')}</span>
             </a>
 
             <button
               onClick={onClose}
               className="w-full py-2.5 text-center text-gray-600 font-bold text-sm hover:underline"
             >
-              मैंने समझ लिया, बंद करें (Close)
+              {t('common.close')}
             </button>
           </div>
         </div>

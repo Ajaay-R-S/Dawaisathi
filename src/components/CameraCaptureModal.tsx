@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useRef, useState, useEffect } from 'react';
-import { Camera, X, RefreshCw, Upload, Check, AlertCircle } from 'lucide-react';
+import { Camera, X, RefreshCw, Upload, AlertCircle } from 'lucide-react';
 import { compressImage } from '@/lib/imageCompressor';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface CameraCaptureModalProps {
   isOpen: boolean;
@@ -16,8 +17,8 @@ export default function CameraCaptureModal({
   isOpen,
   onClose,
   onImageCaptured,
-  title = 'Take Photo',
-  description = 'Align document or machine screen within the frame',
+  title,
+  description,
 }: CameraCaptureModalProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -25,6 +26,11 @@ export default function CameraCaptureModal({
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  const { t } = useLanguage();
+
+  const modalTitle = title || t('prescription.takePhotoBtn');
+  const modalDesc = description || t('prescription.cameraModalDesc');
 
   useEffect(() => {
     if (isOpen) {
@@ -43,7 +49,7 @@ export default function CameraCaptureModal({
 
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('Camera access is not supported by your browser.');
+        throw new Error(t('errors.cameraError'));
       }
 
       const mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -61,9 +67,7 @@ export default function CameraCaptureModal({
       }
     } catch (err: any) {
       console.warn('Camera stream error:', err);
-      setCameraError(
-        'Camera not accessible. You can upload an existing photo or file instead.'
-      );
+      setCameraError(t('errors.cameraError'));
     }
   };
 
@@ -101,7 +105,7 @@ export default function CameraCaptureModal({
       }, 'image/jpeg');
     } catch (e: any) {
       setIsProcessing(false);
-      setCameraError(e.message || 'Failed to capture frame');
+      setCameraError(e.message || t('errors.compressError'));
     }
   };
 
@@ -121,7 +125,7 @@ export default function CameraCaptureModal({
       onClose();
     } catch (err: any) {
       setIsProcessing(false);
-      setCameraError('Failed to process uploaded file.');
+      setCameraError(t('errors.compressError'));
     }
   };
 
@@ -137,8 +141,8 @@ export default function CameraCaptureModal({
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-800">
           <div>
-            <h3 className="text-lg font-bold">{title}</h3>
-            <p className="text-xs text-gray-400">{description}</p>
+            <h3 className="text-lg font-bold">{modalTitle}</h3>
+            <p className="text-xs text-gray-400">{modalDesc}</p>
           </div>
           <button
             onClick={() => {
@@ -146,7 +150,7 @@ export default function CameraCaptureModal({
               onClose();
             }}
             className="p-2 text-gray-400 hover:text-white rounded-full bg-gray-800"
-            aria-label="Close Camera"
+            aria-label={t('common.close')}
           >
             <X className="w-5 h-5" />
           </button>
@@ -163,7 +167,7 @@ export default function CameraCaptureModal({
                 className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold text-sm inline-flex items-center gap-2"
               >
                 <Upload className="w-4 h-4" />
-                <span>गैलरी से फोटो चुनें (Upload File)</span>
+                <span>{t('prescription.chooseFileBtn')}</span>
               </button>
             </div>
           ) : (
@@ -189,7 +193,7 @@ export default function CameraCaptureModal({
           {isProcessing && (
             <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-2">
               <div className="w-10 h-10 border-4 border-emerald-400 border-t-transparent rounded-full animate-spin" />
-              <span className="text-sm font-bold text-white">फोटो कंप्रेस हो रही है...</span>
+              <span className="text-sm font-bold text-white">{t('common.processing')}</span>
             </div>
           )}
         </div>
@@ -204,7 +208,7 @@ export default function CameraCaptureModal({
             <div className="w-12 h-12 rounded-full bg-gray-800 flex items-center justify-center">
               <Upload className="w-5 h-5 text-emerald-400" />
             </div>
-            <span>गैलरी (File)</span>
+            <span>{t('prescription.chooseFileBtn')}</span>
           </button>
           <input
             ref={fileInputRef}
@@ -219,7 +223,7 @@ export default function CameraCaptureModal({
             onClick={handleCaptureFrame}
             disabled={isProcessing || !!cameraError}
             className="w-20 h-20 rounded-full bg-white text-gray-950 flex items-center justify-center shadow-xl active:scale-90 transition disabled:opacity-40 ring-4 ring-emerald-500/50"
-            aria-label="Capture Photo"
+            aria-label={t('prescription.takePhotoBtn')}
           >
             <div className="w-16 h-16 rounded-full border-4 border-gray-950 bg-emerald-500 flex items-center justify-center">
               <Camera className="w-8 h-8 text-white" />
@@ -235,7 +239,7 @@ export default function CameraCaptureModal({
             <div className="w-12 h-12 rounded-full bg-gray-800 flex items-center justify-center">
               <RefreshCw className="w-5 h-5 text-emerald-400" />
             </div>
-            <span>कैमरा बदलें</span>
+            <span>{t('common.retry')}</span>
           </button>
         </div>
       </div>

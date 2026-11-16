@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import PWARegister from '@/components/PWARegister';
+import { LanguageProvider } from '@/context/LanguageContext';
 
 export const metadata: Metadata = {
   title: 'DawaiSaathi (दवाई साथी) - Easy, Safe & Smart Healthcare',
@@ -26,7 +27,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="hi" className="h-full">
+    <html lang="en" className="h-full">
       <head>
         <link rel="manifest" href="/manifest.json" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -34,8 +35,10 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-title" content="DawaiSaathi" />
       </head>
       <body className="h-full flex flex-col font-sans antialiased text-gray-900 bg-slate-50 selection:bg-emerald-500 selection:text-white">
-        <PWARegister />
-        {children}
+        <LanguageProvider>
+          <PWARegister />
+          {children}
+        </LanguageProvider>
       </body>
     </html>
   );

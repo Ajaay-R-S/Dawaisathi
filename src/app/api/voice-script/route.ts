@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-import { ScheduleItem, Language } from '@/types';
+import { ScheduleItem } from '@/types';
+import { Language } from '@/context/LanguageContext';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -8,7 +9,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { schedule = [], language = 'hi', isDemo = false, patientName = 'बाबा' } = body;
+    const { schedule = [], language = 'en', isDemo = false, patientName = 'Ram Prasad' } = body;
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     const modelName = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Camera,
@@ -12,9 +12,7 @@ import {
   ShieldAlert,
   Coins,
   FileText,
-  Sparkles,
   ArrowRight,
-  Info,
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import CameraCaptureModal from '@/components/CameraCaptureModal';
@@ -24,19 +22,20 @@ import { saveExtractedPrescription, getPatientProfile } from '@/lib/supabase';
 import { SAMPLE_PRESCRIPTIONS } from '@/data/samplePrescriptions';
 import { lookupGenericAlternative } from '@/data/genericMedicines';
 import { findLocalInteractions } from '@/data/drugInteractions';
-import { Medicine, PrescriptionExtractionResult, DrugInteractionRule, Language, PatientProfile } from '@/types';
-import { TRANSLATIONS } from '@/data/translations';
+import { Medicine, PrescriptionExtractionResult, DrugInteractionRule, PatientProfile } from '@/types';
+import { useLanguage, Language } from '@/context/LanguageContext';
 
 export default function PrescriptionPage() {
   const router = useRouter();
+  const { language, t, formatNumber } = useLanguage();
   const [patient, setPatient] = useState<PatientProfile | null>(null);
-  const [language, setLanguage] = useState<Language>('hi');
   const [isDemoMode, setIsDemoMode] = useState<boolean>(true);
 
   const [cameraOpen, setCameraOpen] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [imageSizeKB, setImageSizeKB] = useState<number>(0);
+  const [lastBase64, setLastBase64] = useState<string | null>(null);
+  const [currentSampleIndex, setCurrentSampleIndex] = useState<number | null>(null);
 
   // Extracted Prescription State
   const [medicines, setMedicines] = useState<Medicine[]>([]);
@@ -46,21 +45,45 @@ export default function PrescriptionPage() {
   const [hasExtracted, setHasExtracted] = useState<boolean>(false);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
 
-  const t = TRANSLATIONS[language] || TRANSLATIONS.en;
+  // Cache per language so language switching is instantaneous
+  const languageCache = useRef<Record<string, PrescriptionExtractionResult>>({});
 
   useEffect(() => {
     getPatientProfile().then((p) => {
       setPatient(p);
-      if (p.preferred_language) setLanguage(p.preferred_language);
     });
   }, []);
 
+  // When language changes and results are displayed, re-translate/re-fetch (Requirement 4)
+  useEffect(() => {
+    if (hasExtracted) {
+      if (currentSampleIndex !== null) {
+        handleLoadSample(currentSampleIndex, language);
+      } else if (lastBase64) {
+        analyzeImage(lastBase64, language);
+      }
+    }
+  }, [language]);
+
   // Analyze prescription via API
-  const analyzeImage = async (base64: string, sizeKB: number, isDemo = isDemoMode) => {
+  const analyzeImage = async (base64: string, targetLang: Language = language) => {
     setIsAnalyzing(true);
     setPreviewImage(base64);
-    setImageSizeKB(sizeKB);
+    setLastBase64(base64);
+    setCurrentSampleIndex(null);
     setSaveSuccess(false);
+
+    // Check cache
+    const cacheKey = `img_${targetLang}`;
+    if (languageCache.current[cacheKey]) {
+      const cached = languageCache.current[cacheKey];
+      setMedicines(cached.medicines || []);
+      setDoctorNotes(cached.doctor_notes || '');
+      setRawSummary(cached.raw_summary || '');
+      setInteractions(findLocalInteractions(cached.medicines.map((m) => m.name)));
+      setIsAnalyzing(false);
+      return;
+    }
 
     try {
       const res = await fetch('/api/analyze-prescription', {
@@ -68,7 +91,8 @@ export default function PrescriptionPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           imageBase64: base64,
-          isDemo,
+          isDemo: isDemoMode,
+          language: targetLang,
           mimeType: 'image/jpeg',
         }),
       });
@@ -76,28 +100,27 @@ export default function PrescriptionPage() {
       const json = await res.json();
       if (json.success && json.data) {
         const result: PrescriptionExtractionResult = json.data;
+        languageCache.current[cacheKey] = result;
         setMedicines(result.medicines || []);
         setDoctorNotes(result.doctor_notes || '');
         setRawSummary(result.raw_summary || '');
 
-        // Recalculate interactions
         const inter = json.interactions || findLocalInteractions(result.medicines.map((m) => m.name));
         setInteractions(inter);
         setHasExtracted(true);
       } else {
-        alert(json.error || 'Failed to analyze prescription');
+        alert(json.error || t('errors.analysisError'));
       }
     } catch (e: any) {
       console.error('Analysis request error', e);
-      // Fallback gracefully to demo sample
-      handleLoadSample(0);
+      handleLoadSample(0, targetLang);
     } finally {
       setIsAnalyzing(false);
     }
   };
 
   const handleCameraCapture = (data: { base64: string; compressedKB: number }) => {
-    analyzeImage(data.base64, data.compressedKB);
+    analyzeImage(data.base64);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -106,20 +129,43 @@ export default function PrescriptionPage() {
 
     try {
       const compressed = await compressImage(file, 1600, 0.82);
-      analyzeImage(compressed.base64, compressed.compressedSizeKB);
+      analyzeImage(compressed.base64);
     } catch (err) {
-      alert('Error compressing image');
+      alert(t('errors.compressError'));
     }
   };
 
-  const handleLoadSample = (sampleIndex = 0) => {
-    const sample = SAMPLE_PRESCRIPTIONS[sampleIndex].result;
-    setMedicines(sample.medicines);
-    setDoctorNotes(sample.doctor_notes);
-    setRawSummary(sample.raw_summary || '');
-    setInteractions(findLocalInteractions(sample.medicines.map((m) => m.name)));
+  const handleLoadSample = async (sampleIndex = 0, targetLang: Language = language) => {
+    setCurrentSampleIndex(sampleIndex);
     setPreviewImage(null);
-    setHasExtracted(true);
+    setSaveSuccess(false);
+
+    try {
+      const res = await fetch('/api/analyze-prescription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          isDemo: true,
+          sampleIndex,
+          language: targetLang,
+        }),
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        setMedicines(json.data.medicines || []);
+        setDoctorNotes(json.data.doctor_notes || '');
+        setRawSummary(json.data.raw_summary || '');
+        setInteractions(json.interactions || findLocalInteractions(json.data.medicines.map((m: any) => m.name)));
+        setHasExtracted(true);
+      }
+    } catch (e) {
+      const sample = SAMPLE_PRESCRIPTIONS[sampleIndex].result;
+      setMedicines(sample.medicines);
+      setDoctorNotes(sample.doctor_notes);
+      setRawSummary(sample.raw_summary || '');
+      setInteractions(findLocalInteractions(sample.medicines.map((m) => m.name)));
+      setHasExtracted(true);
+    }
   };
 
   // Medicine Field Edits
@@ -127,14 +173,12 @@ export default function PrescriptionPage() {
     const updated = [...medicines];
     updated[index] = { ...updated[index], [field]: value };
 
-    // If user edits name or confirms, we can mark verified
     if (field === 'name') {
       const gen = lookupGenericAlternative(value);
       if (gen) {
         updated[index].generic_alternative = `${gen.janAushadhiName} (Jan Aushadhi)`;
         updated[index].generic_savings_pct = gen.savingsPercent;
       }
-      // Recheck interactions
       setInteractions(findLocalInteractions(updated.map((m) => m.name)));
     }
 
@@ -151,7 +195,7 @@ export default function PrescriptionPage() {
   const handleAddMedicine = () => {
     const newMed: Medicine = {
       id: `med-${Date.now()}`,
-      name: 'New Medicine',
+      name: t('prescription.fieldName'),
       dose: '1 tablet',
       frequency: '1-0-1',
       timing: 'After food',
@@ -185,14 +229,11 @@ export default function PrescriptionPage() {
     }, 1200);
   };
 
-  // Count unverified low confidence items (< 0.7)
   const lowConfidenceCount = medicines.filter((m) => m.confidence < 0.7).length;
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
       <Navbar
-        currentLang={language}
-        onLanguageChange={setLanguage}
         isDemoMode={isDemoMode}
         onToggleDemoMode={() => setIsDemoMode(!isDemoMode)}
         emergencyPhone={patient?.emergency_contact_phone}
@@ -204,13 +245,13 @@ export default function PrescriptionPage() {
         <div className="bg-white rounded-3xl p-6 sm:p-7 border-2 border-emerald-100 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <span className="text-xs font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-              Feature 1: AI Vision Reader
+              {t('prescription.badge')}
             </span>
             <h1 className="text-2xl sm:text-3xl font-black text-gray-900 mt-1">
-              {t.prescription.title}
+              {t('prescription.title')}
             </h1>
             <p className="text-sm text-gray-500 font-semibold mt-0.5">
-              मोबाइल कैमरे से पर्चे की फोटो खींचें। एआई लिखावट पढ़कर दवाएं निकालेगा।
+              {t('prescription.subtitle')}
             </p>
           </div>
 
@@ -219,16 +260,16 @@ export default function PrescriptionPage() {
             <button
               onClick={() => handleLoadSample(0)}
               className="text-xs font-bold bg-emerald-50 text-emerald-800 hover:bg-emerald-100 px-3 py-2 rounded-xl border border-emerald-300 transition"
-              title="Loads sample diabetes & BP prescription with confidence flagging"
+              title={t('prescription.sampleBtn1Title')}
             >
-              नमूना पर्चा 1 (Sample Rx)
+              {t('prescription.sampleBtn1')}
             </button>
             <button
               onClick={() => handleLoadSample(1)}
               className="text-xs font-bold bg-amber-50 text-amber-900 hover:bg-amber-100 px-3 py-2 rounded-xl border border-amber-300 transition"
-              title="Loads cardiac prescription with drug interaction alert"
+              title={t('prescription.sampleBtn2Title')}
             >
-              नमूना पर्चा 2 (Cardiac Risk)
+              {t('prescription.sampleBtn2')}
             </button>
           </div>
         </div>
@@ -241,10 +282,10 @@ export default function PrescriptionPage() {
                 <Camera className="w-8 h-8" />
               </div>
               <h3 className="text-xl font-black text-gray-900">
-                डॉक्टर का पर्चा अपलोड करें
+                {t('prescription.uploadBoxTitle')}
               </h3>
               <p className="text-xs sm:text-sm text-gray-500 font-medium">
-                सीधे कैमरे से फोटो लें या फोन की गैलरी से फाइल चुनें। फोटो अपने आप कंप्रेस होगी।
+                {t('prescription.uploadBoxSub')}
               </p>
             </div>
 
@@ -254,12 +295,12 @@ export default function PrescriptionPage() {
                 className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-lg flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition"
               >
                 <Camera className="w-6 h-6" />
-                <span>कैमरे से फोटो लें</span>
+                <span>{t('prescription.takePhotoBtn')}</span>
               </button>
 
               <label className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gray-100 hover:bg-gray-200 active:scale-95 text-gray-800 font-black text-lg flex items-center justify-center gap-2 cursor-pointer transition">
                 <Upload className="w-6 h-6 text-gray-600" />
-                <span>गैलरी से फाइल चुनें</span>
+                <span>{t('prescription.chooseFileBtn')}</span>
                 <input
                   type="file"
                   accept="image/*"
@@ -276,10 +317,10 @@ export default function PrescriptionPage() {
           <div className="bg-white rounded-3xl p-10 border-2 border-emerald-200 text-center space-y-4 shadow-sm animate-pulse">
             <div className="w-16 h-16 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto" />
             <h3 className="text-xl font-black text-gray-900">
-              {t.prescription.analyzing}
+              {t('prescription.analyzingTitle')}
             </h3>
             <p className="text-sm text-gray-500 font-semibold max-w-sm mx-auto">
-              क्लाउड विजन एलएलएम डॉक्टर की लिखावट का विश्लेषण कर रहा है। कृपया कुछ सेकंड प्रतीक्षा करें।
+              {t('prescription.analyzingSub')}
             </p>
           </div>
         )}
@@ -287,7 +328,7 @@ export default function PrescriptionPage() {
         {/* Extracted Prescription Confirmation Section */}
         {hasExtracted && !isAnalyzing && (
           <div className="space-y-6">
-            {/* Low Confidence Alert Box (CRITICAL REQUIREMENT) */}
+            {/* Low Confidence Alert Box */}
             {lowConfidenceCount > 0 ? (
               <div className="bg-red-50 border-4 border-red-500 rounded-3xl p-5 sm:p-6 shadow-md">
                 <div className="flex items-start gap-3">
@@ -296,11 +337,10 @@ export default function PrescriptionPage() {
                   </div>
                   <div>
                     <h3 className="text-lg sm:text-xl font-black text-red-950">
-                      ⚠️ सावधानी: {lowConfidenceCount} दवा की लिखावट अस्पष्ट है!
+                      {t('prescription.lowConfidenceBannerTitle', { count: formatNumber(lowConfidenceCount) })}
                     </h3>
                     <p className="text-sm font-bold text-red-800 mt-1">
-                      हमने लाल रंग वाले बॉक्स को चिन्हित किया है। हम कभी भी चुपचाप गलत अनुमान नहीं लगाते।
-                      कृपया दवा की गोली का डिब्बा देखकर नाम और खुराक की पुष्टि करें।
+                      {t('prescription.lowConfidenceBannerText')}
                     </p>
                   </div>
                 </div>
@@ -309,18 +349,18 @@ export default function PrescriptionPage() {
               <div className="bg-emerald-50 border-2 border-emerald-400 rounded-2xl p-4 flex items-center gap-3">
                 <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
                 <p className="text-sm font-bold text-emerald-900">
-                  सभी दवाएं उच्च सटीकता (&gt; 70% Confidence) के साथ पहचानी गईं।
+                  {t('prescription.allVerifiedBanner')}
                 </p>
               </div>
             )}
 
-            {/* Drug Interaction Warning Strip (if detected) */}
+            {/* Drug Interaction Warning Strip */}
             {interactions.length > 0 && (
               <div className="bg-rose-50 border-3 border-rose-600 rounded-3xl p-5 sm:p-6 space-y-3 shadow-md">
                 <div className="flex items-center gap-2 text-rose-900">
                   <ShieldAlert className="w-6 h-6 text-rose-600 shrink-0" />
                   <h3 className="text-lg sm:text-xl font-black">
-                    🚨 खतरनाक दवा पारस्परिक क्रिया (Drug-Drug Interaction Alert)
+                    {t('prescription.interactionAlertTitle')}
                   </h3>
                 </div>
                 {interactions.map((inter, i) => (
@@ -333,29 +373,29 @@ export default function PrescriptionPage() {
                         {inter.drugA} + {inter.drugB}
                       </span>
                       <span className="bg-rose-600 text-white text-xs font-black px-2.5 py-0.5 rounded-full">
-                        {inter.severity} SEVERITY
+                        {t('prescription.interactionAlertSeverity', { severity: inter.severity.toUpperCase() })}
                       </span>
                     </div>
                     <p className="text-sm sm:text-base font-bold text-gray-900">
                       {inter.plainLanguage[language] || inter.plainLanguage.en}
                     </p>
                     <p className="text-xs text-gray-500 font-mono">
-                      {inter.medicalExplanation}
+                      {t('prescription.medicalRationale')} {inter.medicalExplanation}
                     </p>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Editable Confirmation Table / Cards */}
+            {/* Editable Confirmation Table */}
             <div className="bg-white rounded-3xl p-5 sm:p-7 border-2 border-emerald-100 shadow-sm space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-xl font-black text-gray-900">
-                    {t.prescription.verifyItems}
+                    {t('prescription.reviewTitle')}
                   </h3>
                   <p className="text-xs text-gray-500 font-semibold">
-                    आप किसी भी नाम या समय को बदलकर ठीक कर सकते हैं।
+                    {t('prescription.reviewSubtitle')}
                   </p>
                 </div>
                 <button
@@ -363,7 +403,7 @@ export default function PrescriptionPage() {
                   className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl font-bold text-xs border border-emerald-300 transition"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>दवा जोड़ें (Add)</span>
+                  <span>{t('prescription.addMedicineBtn')}</span>
                 </button>
               </div>
 
@@ -392,8 +432,8 @@ export default function PrescriptionPage() {
                                 : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                             }`}
                           >
-                            Confidence: {Math.round(med.confidence * 100)}%
-                            {isLowConf && ' ⚠️ कृपया जांचें'}
+                            {t('prescription.confidenceLabel', { pct: formatNumber(Math.round(med.confidence * 100)) })}
+                            {isLowConf && ` ${t('prescription.pleaseVerify')}`}
                           </span>
                         </div>
 
@@ -403,13 +443,13 @@ export default function PrescriptionPage() {
                               onClick={() => handleConfirmVerified(idx)}
                               className="text-xs font-bold bg-red-600 hover:bg-red-700 text-white px-2.5 py-1 rounded-lg"
                             >
-                              सही है, पुष्टि करें ✓
+                              {t('prescription.confirmCorrect')}
                             </button>
                           )}
                           <button
                             onClick={() => handleRemoveMedicine(idx)}
                             className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg"
-                            title="हटाएं (Delete)"
+                            title={t('prescription.deleteTitle')}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -421,7 +461,7 @@ export default function PrescriptionPage() {
                         {/* Medicine Name */}
                         <div>
                           <label className="block text-[11px] font-bold text-gray-600 uppercase mb-0.5">
-                            दवा का नाम (Name)
+                            {t('prescription.fieldName')}
                           </label>
                           <input
                             type="text"
@@ -438,7 +478,7 @@ export default function PrescriptionPage() {
                         {/* Dose */}
                         <div>
                           <label className="block text-[11px] font-bold text-gray-600 uppercase mb-0.5">
-                            खुराक (Dose)
+                            {t('prescription.fieldDose')}
                           </label>
                           <input
                             type="text"
@@ -451,7 +491,7 @@ export default function PrescriptionPage() {
                         {/* Frequency */}
                         <div>
                           <label className="block text-[11px] font-bold text-gray-600 uppercase mb-0.5">
-                            आवृत्ति (1-0-1 / कब लें)
+                            {t('prescription.fieldFrequency')}
                           </label>
                           <input
                             type="text"
@@ -464,7 +504,7 @@ export default function PrescriptionPage() {
                         {/* Timing */}
                         <div>
                           <label className="block text-[11px] font-bold text-gray-600 uppercase mb-0.5">
-                            समय (खाने से पहले / बाद)
+                            {t('prescription.fieldTiming')}
                           </label>
                           <input
                             type="text"
@@ -479,12 +519,12 @@ export default function PrescriptionPage() {
                       <div className="mt-2 text-xs text-gray-500 flex flex-wrap items-center gap-3">
                         {med.color_shape_hint && (
                           <span className="font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md">
-                            रंग/आकार: {med.color_shape_hint}
+                            {t('prescription.pillColorHint')} {med.color_shape_hint}
                           </span>
                         )}
                         {med.notes && (
                           <span className="italic text-gray-600">
-                            नोट: {med.notes}
+                            {t('prescription.notesLabel')} {med.notes}
                           </span>
                         )}
                       </div>
@@ -498,7 +538,7 @@ export default function PrescriptionPage() {
             <div className="bg-white rounded-3xl p-5 sm:p-6 border-2 border-emerald-100 shadow-sm space-y-2">
               <h4 className="font-black text-gray-900 flex items-center gap-2">
                 <FileText className="w-5 h-5 text-emerald-700" />
-                <span>{t.prescription.doctorNotes}</span>
+                <span>{t('prescription.doctorNotesTitle')}</span>
               </h4>
               <textarea
                 value={doctorNotes}
@@ -513,7 +553,7 @@ export default function PrescriptionPage() {
               <div className="flex items-center gap-2">
                 <Coins className="w-5 h-5 text-emerald-600" />
                 <h3 className="text-xl font-black text-gray-900">
-                  {t.prescription.genericSavingsHeader}
+                  {t('prescription.genericSavingsHeader')}
                 </h3>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -540,17 +580,17 @@ export default function PrescriptionPage() {
                 {saveSuccess ? (
                   <>
                     <CheckCircle2 className="w-7 h-7" />
-                    <span>शेड्यूल में सुरक्षित हो गया! (Saved!)</span>
+                    <span>{t('prescription.savedNotification')}</span>
                   </>
                 ) : (
                   <>
-                    <span>पुष्टि करें और आज के शेड्यूल में जोड़ें</span>
+                    <span>{t('prescription.confirmAndSaveBtn')}</span>
                     <ArrowRight className="w-6 h-6" />
                   </>
                 )}
               </button>
               <p className="text-center text-xs text-gray-400 font-semibold mt-2">
-                (Human-in-the-loop: आपकी पुष्टि के बाद ही दवाएं शेड्यूल में जुड़ती हैं)
+                {t('prescription.humanInLoopNotice')}
               </p>
             </div>
           </div>
@@ -562,8 +602,8 @@ export default function PrescriptionPage() {
         isOpen={cameraOpen}
         onClose={() => setCameraOpen(false)}
         onImageCaptured={handleCameraCapture}
-        title="पर्चे की फोटो लें (Scan Prescription)"
-        description="पर्चे को सीधी रोशनी में रखकर चौकोर फ्रेम में संरेखित करें"
+        title={t('prescription.cameraModalTitle')}
+        description={t('prescription.cameraModalDesc')}
       />
     </div>
   );

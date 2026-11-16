@@ -1,27 +1,24 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Volume2, VolumeX, Play, Pause, RotateCcw, Sparkles } from 'lucide-react';
+import { Volume2, Play, Pause, RotateCcw, Sparkles } from 'lucide-react';
 import { speakText, stopSpeaking, isSpeechSynthesisSupported } from '@/lib/speech';
-import { Language } from '@/types';
-import { TRANSLATIONS } from '@/data/translations';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface SpeechPlayerProps {
   textToSpeak: string;
-  language: Language;
   onRefreshScript?: () => void;
   isLoading?: boolean;
 }
 
 export default function SpeechPlayer({
   textToSpeak,
-  language,
   onRefreshScript,
   isLoading = false,
 }: SpeechPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [supported, setSupported] = useState(true);
-  const t = TRANSLATIONS[language] || TRANSLATIONS.en;
+  const { language, t } = useLanguage();
 
   useEffect(() => {
     setSupported(isSpeechSynthesisSupported());
@@ -65,8 +62,8 @@ export default function SpeechPlayer({
 
   if (!supported) {
     return (
-      <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-2xl text-sm">
-        Voice playback is not supported by your current browser. You can still read the text instructions below.
+      <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-2xl text-sm font-semibold">
+        {t('schedule.browserNoSpeech')}
       </div>
     );
   }
@@ -79,11 +76,11 @@ export default function SpeechPlayer({
           <div className="flex items-center gap-2">
             <Volume2 className="w-6 h-6 text-emerald-200" />
             <h3 className="text-xl sm:text-2xl font-black tracking-tight">
-              {t.voicePlayer.playTitle}
+              {t('schedule.voicePlayerTitle')}
             </h3>
           </div>
           <p className="text-emerald-100 text-sm sm:text-base">
-            {isPlaying ? t.voicePlayer.playing : t.voicePlayer.listenInstructions}
+            {isPlaying ? t('schedule.voicePlayerPlaying') : t('schedule.voicePlayerListening')}
           </p>
         </div>
 
@@ -94,8 +91,8 @@ export default function SpeechPlayer({
               onClick={onRefreshScript}
               disabled={isLoading || isPlaying}
               className="p-3.5 bg-white/10 hover:bg-white/20 active:scale-95 rounded-2xl transition disabled:opacity-50"
-              title="Regenerate Voice Guide with AI"
-              aria-label="Refresh Script"
+              title={t('schedule.voicePlayerRefresh')}
+              aria-label={t('schedule.voicePlayerRefresh')}
             >
               <Sparkles className={`w-6 h-6 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
@@ -105,8 +102,8 @@ export default function SpeechPlayer({
             onClick={handleReplay}
             disabled={!textToSpeak || isLoading}
             className="p-3.5 bg-white/10 hover:bg-white/20 active:scale-95 rounded-2xl transition disabled:opacity-50"
-            title="Replay from start"
-            aria-label="Replay Audio"
+            title={t('schedule.voicePlayerReplay')}
+            aria-label={t('schedule.voicePlayerReplay')}
           >
             <RotateCcw className="w-6 h-6" />
           </button>
@@ -120,17 +117,17 @@ export default function SpeechPlayer({
                 ? 'bg-amber-400 text-amber-950 hover:bg-amber-300 ring-4 ring-amber-300/40'
                 : 'bg-white text-emerald-900 hover:bg-emerald-50 ring-4 ring-white/30'
             }`}
-            aria-label={isPlaying ? 'Pause Audio' : 'Play Audio'}
+            aria-label={isPlaying ? t('schedule.voicePlayerStop') : t('schedule.voicePlayerPlay')}
           >
             {isPlaying ? (
               <>
                 <Pause className="w-7 h-7 fill-current" />
-                <span>{t.voicePlayer.stop}</span>
+                <span>{t('schedule.voicePlayerStop')}</span>
               </>
             ) : (
               <>
                 <Play className="w-7 h-7 fill-current ml-0.5" />
-                <span>सुनें (Play)</span>
+                <span>{t('schedule.voicePlayerPlay')}</span>
               </>
             )}
           </button>
@@ -157,7 +154,7 @@ export default function SpeechPlayer({
       {/* Script Box (Spoken-Style Transcript) */}
       <div className="mt-5 bg-black/20 rounded-2xl p-4 sm:p-5 backdrop-blur-sm border border-white/10">
         <p className="text-white text-base sm:text-lg leading-relaxed font-medium">
-          {textToSpeak || (isLoading ? 'AI is drafting spoken schedule...' : 'No prescription schedule loaded yet.')}
+          {textToSpeak || (isLoading ? t('common.loading') : t('schedule.voiceNoSchedule'))}
         </p>
       </div>
     </div>

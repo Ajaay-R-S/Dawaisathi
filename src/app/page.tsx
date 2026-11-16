@@ -6,16 +6,10 @@ import {
   Camera,
   Activity,
   Calendar,
-  PhoneCall,
-  MessageCircle,
   ShieldAlert,
   Coins,
   Info,
-  Flame,
-  CheckCircle2,
-  Sparkles,
   User,
-  HeartHandshake,
   ArrowRight,
   RotateCcw,
 } from 'lucide-react';
@@ -28,20 +22,18 @@ import {
   savePatientProfile,
   resetDemoState,
 } from '@/lib/supabase';
-import { PatientProfile, ScheduleItem, HealthReading, Language } from '@/types';
-import { TRANSLATIONS } from '@/data/translations';
+import { PatientProfile, ScheduleItem, HealthReading } from '@/types';
+import { useLanguage } from '@/context/LanguageContext';
 
 export default function HomePage() {
+  const { language, t } = useLanguage();
   const [patient, setPatient] = useState<PatientProfile | null>(null);
   const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
   const [readings, setReadings] = useState<HealthReading[]>([]);
-  const [language, setLanguage] = useState<Language>('hi');
   const [isDemoMode, setIsDemoMode] = useState<boolean>(true);
   const [showProfileModal, setShowProfileModal] = useState<boolean>(false);
   const [editName, setEditName] = useState('');
   const [editEmergencyPhone, setEditEmergencyPhone] = useState('');
-
-  const t = TRANSLATIONS[language] || TRANSLATIONS.en;
 
   useEffect(() => {
     loadData();
@@ -52,23 +44,12 @@ export default function HomePage() {
     setPatient(prof);
     setEditName(prof.full_name);
     setEditEmergencyPhone(prof.emergency_contact_phone);
-    if (prof.preferred_language) {
-      setLanguage(prof.preferred_language);
-    }
 
     const sched = await getDailySchedule();
     setSchedule(sched);
 
     const vitals = await getHealthReadings();
     setReadings(vitals);
-  };
-
-  const handleLanguageChange = async (lang: Language) => {
-    setLanguage(lang);
-    if (patient) {
-      const updated = await savePatientProfile({ preferred_language: lang });
-      setPatient(updated);
-    }
   };
 
   const handleToggleDemoMode = () => {
@@ -88,22 +69,15 @@ export default function HomePage() {
   };
 
   const handleResetDemoData = async () => {
-    if (confirm('Reset to initial demo data (Ram Prasad Sharma + 7 days readings)?')) {
+    if (confirm(t('home.resetConfirm'))) {
       await resetDemoState();
       await loadData();
     }
   };
 
-  const cleanPhone = (patient?.emergency_contact_phone || '+919876543210').replace(/[^0-9]/g, '');
-  const familyWhatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(
-    `नमस्ते! मैं ${patient?.full_name || 'Ram Prasad'} बोल रहा हूँ। मेरी तबीयत की जांच करें।`
-  )}`;
-
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
       <Navbar
-        currentLang={language}
-        onLanguageChange={handleLanguageChange}
         isDemoMode={isDemoMode}
         onToggleDemoMode={handleToggleDemoMode}
         emergencyPhone={patient?.emergency_contact_phone}
@@ -119,18 +93,18 @@ export default function HomePage() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                  {language === 'hi' ? 'नमस्ते / Welcome' : 'Welcome'}
+                <span className="text-xs font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                  {t('home.welcome')}
                 </span>
                 <span className="text-xs text-gray-400 font-mono">
-                  ID: {patient?.device_id.slice(-8) || 'device-01'}
+                  {t('home.patientId')}: {patient?.device_id.slice(-8) || 'device-01'}
                 </span>
               </div>
               <h1 className="text-2xl sm:text-3xl font-black text-gray-900 mt-0.5">
-                {patient?.full_name || 'Ram Prasad Sharma'}
+                {patient?.full_name || t('home.patientNameDefault')}
               </h1>
               <p className="text-xs sm:text-sm text-gray-500 font-semibold">
-                आपातकालीन संपर्क: {patient?.emergency_contact_name || 'Arun (Son)'} (
+                {t('home.emergencyContact')}: {patient?.emergency_contact_name || 'Arun (Son)'} (
                 {patient?.emergency_contact_phone || '+919876543210'})
               </p>
             </div>
@@ -141,12 +115,13 @@ export default function HomePage() {
               onClick={() => setShowProfileModal(true)}
               className="text-xs font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-3 py-2 rounded-xl border border-emerald-200 transition"
             >
-              प्रोफ़ाइल बदलें (Edit)
+              {t('home.editProfile')}
             </button>
             <button
               onClick={handleResetDemoData}
               className="text-xs font-bold text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 p-2 rounded-xl transition"
-              title="Reset Demo Patient Data"
+              title={t('home.resetDemo')}
+              aria-label={t('home.resetDemo')}
             >
               <RotateCcw className="w-4 h-4" />
             </button>
@@ -155,11 +130,10 @@ export default function HomePage() {
 
         {/* ------------------------------------------------------------- */}
         {/* CORE REQUIREMENT: FIRST SCREEN WITH JUST 3 BIG BUTTONS        */}
-        {/* (Huge buttons, high contrast, icons + text, elderly-friendly) */}
         {/* ------------------------------------------------------------- */}
-        <section aria-label="Quick Actions" className="space-y-4">
+        <section aria-label={t('home.quickAccessTitle')} className="space-y-4">
           <h2 className="text-xs font-black uppercase tracking-widest text-gray-400 px-1">
-            मुख्य सुविधाएं (Quick Access - 1 Tap)
+            {t('home.quickAccessTitle')}
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
@@ -173,19 +147,19 @@ export default function HomePage() {
                   <Camera className="w-8 h-8 text-white" />
                 </div>
                 <span className="text-xs font-black uppercase tracking-wider bg-white/20 px-3 py-1 rounded-full">
-                  Step 1
+                  {t('common.step')} 1
                 </span>
               </div>
               <div className="mt-6">
                 <h3 className="text-2xl sm:text-3xl font-black tracking-tight leading-snug">
-                  {t.homeButtons.scanPrescription}
+                  {t('home.btnScanTitle')}
                 </h3>
                 <p className="text-blue-100 text-sm sm:text-base font-semibold mt-1">
-                  {t.homeButtons.scanSub}
+                  {t('home.btnScanSub')}
                 </p>
               </div>
               <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs font-bold">
-                <span>AI पर्ची पढ़ेगा</span>
+                <span>{t('home.btnScanFoot')}</span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </div>
             </Link>
@@ -205,14 +179,14 @@ export default function HomePage() {
               </div>
               <div className="mt-6">
                 <h3 className="text-2xl sm:text-3xl font-black tracking-tight leading-snug">
-                  {t.homeButtons.logVitals}
+                  {t('home.btnLogTitle')}
                 </h3>
                 <p className="text-rose-100 text-sm sm:text-base font-semibold mt-1">
-                  {t.homeButtons.logSub}
+                  {t('home.btnLogSub')}
                 </p>
               </div>
               <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs font-bold">
-                <span>बोलकर या फोटो से</span>
+                <span>{t('home.btnLogFoot')}</span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </div>
             </Link>
@@ -232,14 +206,14 @@ export default function HomePage() {
               </div>
               <div className="mt-6">
                 <h3 className="text-2xl sm:text-3xl font-black tracking-tight leading-snug">
-                  {t.homeButtons.todaySchedule}
+                  {t('home.btnScheduleTitle')}
                 </h3>
                 <p className="text-emerald-100 text-sm sm:text-base font-semibold mt-1">
-                  {t.homeButtons.todaySub}
+                  {t('home.btnScheduleSub')}
                 </p>
               </div>
               <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs font-bold">
-                <span>आवाज में सुनें</span>
+                <span>{t('home.btnScheduleFoot')}</span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </div>
             </Link>
@@ -247,7 +221,7 @@ export default function HomePage() {
         </section>
 
         {/* Adherence Streak Summary */}
-        <section aria-label="Medicine Streak">
+        <section aria-label={t('common.todayProgress')}>
           <AdherenceStreak
             streakCount={patient?.streak_count || 6}
             schedule={schedule}
@@ -267,15 +241,15 @@ export default function HomePage() {
               </div>
               <div>
                 <h4 className="font-bold text-gray-900 group-hover:text-amber-800 transition">
-                  {t.navigation.safety}
+                  {t('home.secSafetyTitle')}
                 </h4>
                 <p className="text-xs text-gray-500">
-                  30+ खतरनाक दवाओं के जोड़े की जांच
+                  {t('home.secSafetySub')}
                 </p>
               </div>
             </div>
             <span className="mt-3 text-xs font-bold text-amber-700 flex items-center gap-1">
-              जांच करें <ArrowRight className="w-3.5 h-3.5" />
+              {t('home.secSafetyAction')} <ArrowRight className="w-3.5 h-3.5" />
             </span>
           </Link>
 
@@ -290,15 +264,15 @@ export default function HomePage() {
               </div>
               <div>
                 <h4 className="font-bold text-gray-900 group-hover:text-emerald-800 transition">
-                  {t.navigation.generics}
+                  {t('home.secGenericsTitle')}
                 </h4>
                 <p className="text-xs text-gray-500">
-                  जन औषधि पर 80% तक पैसे बचाएं
+                  {t('home.secGenericsSub')}
                 </p>
               </div>
             </div>
             <span className="mt-3 text-xs font-bold text-emerald-700 flex items-center gap-1">
-              सस्ती दवा खोजें <ArrowRight className="w-3.5 h-3.5" />
+              {t('home.secGenericsAction')} <ArrowRight className="w-3.5 h-3.5" />
             </span>
           </Link>
 
@@ -313,22 +287,22 @@ export default function HomePage() {
               </div>
               <div>
                 <h4 className="font-bold text-gray-900 group-hover:text-slate-800 transition">
-                  {t.navigation.limits}
+                  {t('home.secLimitsTitle')}
                 </h4>
                 <p className="text-xs text-gray-500">
-                  यह कैसे काम करता है और इसकी सीमाएं
+                  {t('home.secLimitsSub')}
                 </p>
               </div>
             </div>
             <span className="mt-3 text-xs font-bold text-slate-700 flex items-center gap-1">
-              जानकारी पढ़ें <ArrowRight className="w-3.5 h-3.5" />
+              {t('home.secLimitsAction')} <ArrowRight className="w-3.5 h-3.5" />
             </span>
           </Link>
         </section>
 
         {/* Disclaimer Bar */}
         <div className="p-4 rounded-2xl bg-gray-100 border border-gray-200 text-center text-xs text-gray-600 font-semibold leading-relaxed">
-          {t.disclaimer}
+          {t('common.disclaimer')}
         </div>
       </main>
 
@@ -337,15 +311,15 @@ export default function HomePage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4">
             <h3 className="text-xl font-black text-gray-900">
-              रोगी प्रोफ़ाइल (Patient Details)
+              {t('home.profileModalTitle')}
             </h3>
             <p className="text-xs text-gray-500">
-              बिना किसी पासवर्ड या लॉगिन दीवार के, आप केवल अपना नाम और परिवार का फोन नंबर सुरक्षित कर सकते हैं।
+              {t('home.profileModalSub')}
             </p>
             <form onSubmit={handleSaveProfile} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
-                  मरीज का नाम (Patient Name)
+                  {t('home.fieldName')}
                 </label>
                 <input
                   type="text"
@@ -357,7 +331,7 @@ export default function HomePage() {
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
-                  आपातकालीन परिवार का फ़ोन (WhatsApp SOS Phone)
+                  {t('home.fieldPhone')}
                 </label>
                 <input
                   type="text"
@@ -374,13 +348,13 @@ export default function HomePage() {
                   onClick={() => setShowProfileModal(false)}
                   className="w-1/2 py-3 rounded-xl bg-gray-100 text-gray-700 font-bold hover:bg-gray-200"
                 >
-                  रद्द करें (Cancel)
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
                   className="w-1/2 py-3 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700"
                 >
-                  सुरक्षित करें (Save)
+                  {t('home.saveProfileBtn')}
                 </button>
               </div>
             </form>

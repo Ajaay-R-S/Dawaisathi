@@ -1,4 +1,4 @@
-export type Language = 'hi' | 'ta' | 'te' | 'en';
+export type Language = 'en' | 'hi' | 'ta' | 'te';
 
 export type Slot = 'morning' | 'afternoon' | 'night';
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -17,12 +17,9 @@ import {
   Coins,
   Info,
 } from 'lucide-react';
-import { Language } from '@/types';
-import { TRANSLATIONS } from '@/data/translations';
+import { useLanguage, SUPPORTED_LANGUAGES, Language } from '@/context/LanguageContext';
 
 interface NavbarProps {
-  currentLang: Language;
-  onLanguageChange: (lang: Language) => void;
   isDemoMode: boolean;
   onToggleDemoMode: () => void;
   emergencyPhone?: string;
@@ -30,8 +27,6 @@ interface NavbarProps {
 }
 
 export default function Navbar({
-  currentLang,
-  onLanguageChange,
   isDemoMode,
   onToggleDemoMode,
   emergencyPhone = '+919876543210',
@@ -39,21 +34,21 @@ export default function Navbar({
 }: NavbarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const pathname = usePathname();
-  const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
+  const { language, setLanguage, t } = useLanguage();
 
   const cleanPhone = emergencyPhone.replace(/[^0-9]/g, '');
   const emergencyWhatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(
-    `🚨 EMERGENCY ALERT: ${patientName} needs urgent assistance! Please call or check immediately.`
+    t('emergency.whatsappText', { name: patientName })
   )}`;
 
   const navLinks = [
-    { href: '/', label: t.navigation.home, icon: Heart },
-    { href: '/prescription', label: t.navigation.scan, icon: Pill },
-    { href: '/schedule', label: t.navigation.schedule, icon: Calendar },
-    { href: '/health', label: t.navigation.vitals, icon: Activity },
-    { href: '/safety', label: t.navigation.safety, icon: ShieldAlert },
-    { href: '/generics', label: t.navigation.generics, icon: Coins },
-    { href: '/limits', label: t.navigation.limits, icon: Info },
+    { href: '/', label: t('nav.home'), icon: Heart },
+    { href: '/prescription', label: t('nav.scan'), icon: Pill },
+    { href: '/schedule', label: t('nav.schedule'), icon: Calendar },
+    { href: '/health', label: t('nav.vitals'), icon: Activity },
+    { href: '/safety', label: t('nav.safety'), icon: ShieldAlert },
+    { href: '/generics', label: t('nav.generics'), icon: Coins },
+    { href: '/limits', label: t('nav.limits'), icon: Info },
   ];
 
   return (
@@ -62,13 +57,13 @@ export default function Navbar({
       <div className="bg-red-600 text-white px-3 py-1.5 flex items-center justify-between text-xs sm:text-sm font-semibold">
         <div className="flex items-center gap-1.5">
           <span className="inline-block w-2.5 h-2.5 rounded-full bg-white animate-pulse" />
-          <span>{t.emergencyTitle}</span>
+          <span>{t('emergency.barTitle')}</span>
         </div>
         <div className="flex items-center gap-3">
           <a
             href="tel:108"
             className="flex items-center gap-1 bg-white text-red-600 px-2.5 py-0.5 rounded-full font-bold shadow hover:bg-red-50 transition active:scale-95"
-            title="Call National Ambulance"
+            title={t('emergency.call108Full')}
           >
             <PhoneCall className="w-3.5 h-3.5" />
             <span>108</span>
@@ -78,10 +73,10 @@ export default function Navbar({
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1 bg-emerald-500 text-white px-2.5 py-0.5 rounded-full font-bold shadow hover:bg-emerald-600 transition active:scale-95"
-            title="Send WhatsApp alert to family contact"
+            title={t('emergency.sendSosWhatsapp')}
           >
             <MessageCircle className="w-3.5 h-3.5" />
-            <span className="hidden xs:inline">SOS WhatsApp</span>
+            <span className="hidden xs:inline">{t('emergency.sosWhatsapp')}</span>
           </a>
         </div>
       </div>
@@ -96,13 +91,13 @@ export default function Navbar({
             </div>
             <div>
               <span className="text-xl sm:text-2xl font-black text-emerald-950 tracking-tight flex items-center gap-1">
-                {t.appName}
+                {t('common.appName')}
                 <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-md">
-                  VibeX
+                  {t('common.vibexBadge')}
                 </span>
               </span>
               <p className="text-[11px] text-gray-500 hidden sm:block leading-none">
-                {t.tagline}
+                {t('common.tagline')}
               </p>
             </div>
           </Link>
@@ -117,29 +112,31 @@ export default function Navbar({
                   ? 'bg-amber-100 border-amber-300 text-amber-900 shadow-sm'
                   : 'bg-gray-100 border-gray-200 text-gray-600 hover:bg-gray-200'
               }`}
-              title="Toggle Pre-recorded Sample Responses for reliable presentation"
             >
               <Sparkles className={`w-3.5 h-3.5 ${isDemoMode ? 'text-amber-600' : 'text-gray-400'}`} />
-              <span>Demo Mode: {isDemoMode ? 'ON' : 'OFF'}</span>
+              <span>
+                {t('common.demoMode')}: {isDemoMode ? t('common.on') : t('common.off')}
+              </span>
             </button>
 
-            {/* Language Selector */}
+            {/* Language Selector: Names in their own native script */}
             <div className="relative inline-block">
               <select
-                value={currentLang}
-                onChange={(e) => onLanguageChange(e.target.value as Language)}
-                className="bg-emerald-50 border-2 border-emerald-300 text-emerald-900 font-bold text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer shadow-sm"
-                aria-label="Select Language"
+                value={language}
+                onChange={(e) => setLanguage(e.target.value as Language)}
+                className="bg-emerald-50 border-2 border-emerald-300 text-emerald-950 font-bold text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer shadow-sm"
+                aria-label={t('nav.selectLanguage')}
               >
-                <option value="hi">हिन्दी (Hindi)</option>
-                <option value="en">English</option>
-                <option value="ta">தமிழ் (Tamil)</option>
-                <option value="te">తెలుగు (Telugu)</option>
+                {SUPPORTED_LANGUAGES.map((lang) => (
+                  <option key={lang.code} value={lang.code} className="font-semibold text-gray-900">
+                    {lang.nativeName}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
 
-          {/* Mobile hamburger menu */}
+          {/* Mobile hamburger menu and quick controls */}
           <div className="flex md:hidden items-center gap-2">
             <button
               onClick={onToggleDemoMode}
@@ -147,22 +144,24 @@ export default function Navbar({
                 isDemoMode ? 'bg-amber-100 text-amber-900' : 'bg-gray-100 text-gray-600'
               }`}
             >
-              Demo: {isDemoMode ? 'ON' : 'OFF'}
+              {isDemoMode ? t('common.on') : t('common.off')}
             </button>
             <select
-              value={currentLang}
-              onChange={(e) => onLanguageChange(e.target.value as Language)}
+              value={language}
+              onChange={(e) => setLanguage(e.target.value as Language)}
               className="bg-emerald-50 border border-emerald-300 text-emerald-900 font-bold text-xs rounded px-2 py-1"
+              aria-label={t('nav.selectLanguage')}
             >
-              <option value="hi">HI</option>
-              <option value="en">EN</option>
-              <option value="ta">TA</option>
-              <option value="te">TE</option>
+              {SUPPORTED_LANGUAGES.map((lang) => (
+                <option key={lang.code} value={lang.code}>
+                  {lang.nativeName}
+                </option>
+              ))}
             </select>
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="p-2 rounded-lg text-gray-700 hover:bg-emerald-50 focus:outline-none"
-              aria-label="Open Menu"
+              aria-label={mobileMenuOpen ? t('nav.closeMenu') : t('nav.openMenu')}
             >
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>

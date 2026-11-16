@@ -7,14 +7,7 @@ import {
   Camera,
   Keyboard,
   TrendingUp,
-  AlertTriangle,
   CheckCircle2,
-  PhoneCall,
-  MessageCircle,
-  Plus,
-  Clock,
-  Sparkles,
-  ArrowUpRight,
 } from 'lucide-react';
 import {
   LineChart,
@@ -41,14 +34,13 @@ import { ParsedVitalsFromSpeech } from '@/lib/speech';
 import {
   HealthReading,
   PatientProfile,
-  Language,
   RiskEvaluationResult,
 } from '@/types';
-import { TRANSLATIONS } from '@/data/translations';
+import { useLanguage } from '@/context/LanguageContext';
 
 export default function HealthPage() {
+  const { language, t, formatNumber, formatDate } = useLanguage();
   const [patient, setPatient] = useState<PatientProfile | null>(null);
-  const [language, setLanguage] = useState<Language>('hi');
   const [isDemoMode, setIsDemoMode] = useState<boolean>(true);
 
   // Active Vitals Type
@@ -68,8 +60,6 @@ export default function HealthPage() {
   const [activeRiskAlert, setActiveRiskAlert] = useState<RiskEvaluationResult | null>(null);
   const [isRiskModalOpen, setIsRiskModalOpen] = useState(false);
 
-  const t = TRANSLATIONS[language] || TRANSLATIONS.en;
-
   useEffect(() => {
     loadData();
   }, []);
@@ -77,13 +67,11 @@ export default function HealthPage() {
   const loadData = async () => {
     const p = await getPatientProfile();
     setPatient(p);
-    if (p.preferred_language) setLanguage(p.preferred_language);
 
     const data = await getHealthReadings();
     setReadings(data);
   };
 
-  // Handle Spoken Vitals from Web Speech API
   const handleParsedVoiceVitals = (parsed: ParsedVitalsFromSpeech) => {
     if (parsed.type === 'sugar') {
       setActiveType('sugar');
@@ -96,7 +84,6 @@ export default function HealthPage() {
     }
   };
 
-  // Handle Camera Capture for Glucometer / BP Screen
   const handleCameraCapture = async (data: { base64: string; compressedKB: number }) => {
     setIsOcrLoading(true);
     try {
@@ -127,7 +114,6 @@ export default function HealthPage() {
     }
   };
 
-  // Submit and Save Reading
   const handleSaveReading = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
@@ -137,19 +123,18 @@ export default function HealthPage() {
     if (activeType === 'sugar') {
       valNum = parseFloat(sugarValue);
       if (isNaN(valNum) || valNum <= 0) {
-        alert('Please enter a valid blood sugar reading');
+        alert(t('errors.invalidSugar'));
         return;
       }
     } else {
       valNum = parseFloat(bpSystolic);
       valSec = parseFloat(bpDiastolic);
       if (isNaN(valNum) || isNaN(valSec)) {
-        alert('Please enter valid systolic and diastolic BP numbers');
+        alert(t('errors.invalidBP'));
         return;
       }
     }
 
-    // 1. Evaluate with Rule-Based Risk Engine (NOT LLM only)
     const riskEval = evaluateVitalsRisk(
       {
         type: activeType,
@@ -163,7 +148,6 @@ export default function HealthPage() {
       readings
     );
 
-    // 2. Persist to Supabase / Local database
     const saved = await saveHealthReading({
       type: activeType,
       value_numeric: valNum,
@@ -176,44 +160,35 @@ export default function HealthPage() {
       logged_at: new Date().toISOString(),
     });
 
-    // Update list
     setReadings([saved, ...readings]);
 
-    // 3. If Moderate or High Risk, pop up safety alert modal with WhatsApp link!
     if (riskEval.risk_level !== 'normal') {
       setActiveRiskAlert(riskEval);
       setIsRiskModalOpen(true);
     } else {
-      alert(language === 'hi' ? 'रीडिंग सुरक्षित हो गई! स्तर सामान्य है।' : 'Reading saved! Level is safe.');
+      alert(t('vitals.savedSuccess'));
     }
   };
 
-  // Quick Demo Spike Generator for Judges
-  const handleTriggerTestSpike = (spikeType: 'high_sugar' | 'high_bp' | 'trend_rise') => {
+  const handleTriggerTestSpike = (spikeType: 'high_sugar' | 'high_bp') => {
     if (spikeType === 'high_sugar') {
       setActiveType('sugar');
       setSugarValue('315');
       setInputMode('manual');
-    } else if (spikeType === 'high_bp') {
+    } else {
       setActiveType('bp');
       setBpSystolic('185');
       setBpDiastolic('122');
       setInputMode('manual');
-    } else if (spikeType === 'trend_rise') {
-      setActiveType('sugar');
-      setSugarValue('235');
-      setInputMode('manual');
     }
   };
 
-  // Filter readings for Chart
   const filteredReadings = readings
     .filter((r) => r.type === activeType)
     .slice(0, 10)
     .reverse()
     .map((r) => {
-      const d = new Date(r.logged_at);
-      const timeStr = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+      const timeStr = formatDate(r.logged_at, { month: 'short', day: 'numeric' });
       return {
         date: timeStr,
         value: r.value_numeric,
@@ -225,8 +200,6 @@ export default function HealthPage() {
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
       <Navbar
-        currentLang={language}
-        onLanguageChange={setLanguage}
         isDemoMode={isDemoMode}
         onToggleDemoMode={() => setIsDemoMode(!isDemoMode)}
         emergencyPhone={patient?.emergency_contact_phone}
@@ -238,39 +211,37 @@ export default function HealthPage() {
         <div className="bg-white rounded-3xl p-5 sm:p-7 border-2 border-emerald-100 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <span className="text-xs font-black uppercase tracking-wider text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200">
-              Feature 6: Health Safety Loop
+              {t('vitals.badge')}
             </span>
             <h1 className="text-2xl sm:text-3xl font-black text-gray-900 mt-1">
-              {t.vitals.title}
+              {t('vitals.title')}
             </h1>
             <p className="text-sm text-gray-500 font-semibold mt-0.5">
-              बोलकर, मशीन की फोटो खींचकर या टाइप करके तुरंत जांचें।
+              {t('vitals.subtitle')}
             </p>
           </div>
 
-          {/* Test Risk Triggers for Judges */}
+          {/* Test Risk Triggers */}
           <div className="flex flex-wrap items-center gap-1.5 self-end sm:self-auto">
-            <span className="text-[11px] font-bold text-gray-400">जज टेस्ट (Triggers):</span>
+            <span className="text-[11px] font-bold text-gray-400">{t('vitals.testTriggers')}</span>
             <button
               onClick={() => handleTriggerTestSpike('high_sugar')}
               className="text-xs font-bold bg-rose-50 text-rose-800 hover:bg-rose-100 px-2.5 py-1.5 rounded-lg border border-rose-300 transition"
               title="Test >300 mg/dL critical threshold"
             >
-              शुगर 315 (Spike)
+              {t('vitals.sugarSpikeBtn')}
             </button>
             <button
               onClick={() => handleTriggerTestSpike('high_bp')}
               className="text-xs font-bold bg-red-50 text-red-800 hover:bg-red-100 px-2.5 py-1.5 rounded-lg border border-red-300 transition"
               title="Test >180/120 mmHg hypertensive crisis threshold"
             >
-              BP 185/122
+              {t('vitals.bpSpikeBtn')}
             </button>
           </div>
         </div>
 
-        {/* ------------------------------------------------------------- */}
-        {/* VITALS TYPE SELECTOR: SUGAR vs BP                             */}
-        {/* ------------------------------------------------------------- */}
+        {/* VITALS TYPE SELECTOR: SUGAR vs BP */}
         <div className="grid grid-cols-2 gap-3">
           <button
             onClick={() => setActiveType('sugar')}
@@ -281,7 +252,7 @@ export default function HealthPage() {
             }`}
           >
             <Activity className="w-6 h-6" />
-            <span>{t.vitals.sugarTab}</span>
+            <span>{t('vitals.tabSugar')}</span>
           </button>
 
           <button
@@ -293,13 +264,11 @@ export default function HealthPage() {
             }`}
           >
             <Activity className="w-6 h-6" />
-            <span>{t.vitals.bpTab}</span>
+            <span>{t('vitals.tabBP')}</span>
           </button>
         </div>
 
-        {/* ------------------------------------------------------------- */}
-        {/* INPUT MODE TABS: VOICE / CAMERA OCR / TYPE                    */}
-        {/* ------------------------------------------------------------- */}
+        {/* INPUT MODE TABS */}
         <div className="bg-white rounded-3xl p-5 sm:p-7 border-2 border-emerald-100 shadow-sm space-y-5">
           <div className="flex items-center justify-center gap-2 border-b border-gray-100 pb-4">
             <button
@@ -311,7 +280,7 @@ export default function HealthPage() {
               }`}
             >
               <Mic className="w-5 h-5" />
-              <span>{t.vitals.voiceReading}</span>
+              <span>{t('vitals.modeVoice')}</span>
             </button>
 
             <button
@@ -326,7 +295,7 @@ export default function HealthPage() {
               }`}
             >
               <Camera className="w-5 h-5" />
-              <span>{t.vitals.cameraReading}</span>
+              <span>{t('vitals.modeCamera')}</span>
             </button>
 
             <button
@@ -338,7 +307,7 @@ export default function HealthPage() {
               }`}
             >
               <Keyboard className="w-5 h-5" />
-              <span>{t.vitals.typeReading}</span>
+              <span>{t('vitals.modeManual')}</span>
             </button>
           </div>
 
@@ -346,7 +315,6 @@ export default function HealthPage() {
           {inputMode === 'voice' && (
             <div className="py-2">
               <VoiceInputButton
-                language={language}
                 onParsedVitals={handleParsedVoiceVitals}
                 targetType={activeType}
               />
@@ -360,20 +328,20 @@ export default function HealthPage() {
                 <div className="space-y-3">
                   <div className="w-12 h-12 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto" />
                   <p className="text-sm font-bold text-gray-700">
-                    मशीन की स्क्रीन से नंबर पढ़ा जा रहा है...
+                    {t('vitals.cameraReadingStatus')}
                   </p>
                 </div>
               ) : (
                 <div className="space-y-3">
                   <Camera className="w-12 h-12 text-emerald-600 mx-auto" />
                   <p className="text-sm font-bold text-gray-700">
-                    ग्लूकोमीटर या बीपी मशीन की स्क्रीन सामने रखकर फोटो लें
+                    {t('vitals.cameraReadingInstruction')}
                   </p>
                   <button
                     onClick={() => setCameraOpen(true)}
                     className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold shadow transition"
                   >
-                    कैमरा खोलें (Open Camera)
+                    {t('vitals.openCameraBtn')}
                   </button>
                 </div>
               )}
@@ -387,7 +355,7 @@ export default function HealthPage() {
                 <div className="flex flex-col sm:flex-row items-center gap-4">
                   <div className="w-full sm:w-1/2">
                     <label className="block text-xs font-black text-gray-600 uppercase mb-1">
-                      ब्लड शुगर रीडिंग (mg/dL)
+                      {t('vitals.fieldSugar')}
                     </label>
                     <input
                       type="number"
@@ -401,18 +369,18 @@ export default function HealthPage() {
 
                   <div className="w-full sm:w-1/2">
                     <label className="block text-xs font-black text-gray-600 uppercase mb-1">
-                      नापने का समय (Context)
+                      {t('vitals.fieldContext')}
                     </label>
                     <div className="grid grid-cols-3 gap-2">
-                      {([
-                        { key: 'fasting', label: t.vitals.fasting },
-                        { key: 'post-meal', label: t.vitals.postMeal },
-                        { key: 'random', label: t.vitals.random },
-                      ] as const).map(({ key, label }) => (
+                      {[
+                        { key: 'fasting', label: t('vitals.ctxFasting') },
+                        { key: 'post-meal', label: t('vitals.ctxPostMeal') },
+                        { key: 'random', label: t('vitals.ctxRandom') },
+                      ].map(({ key, label }) => (
                         <button
                           key={key}
                           type="button"
-                          onClick={() => setMealContext(key)}
+                          onClick={() => setMealContext(key as any)}
                           className={`py-3 px-2 rounded-xl text-xs font-bold border transition ${
                             mealContext === key
                               ? 'bg-emerald-600 text-white border-emerald-600 shadow'
@@ -430,7 +398,7 @@ export default function HealthPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-black text-gray-600 uppercase mb-1">
-                    {t.vitals.systolic} (ऊपर का)
+                    {t('vitals.fieldSystolic')}
                   </label>
                   <input
                     type="number"
@@ -440,12 +408,12 @@ export default function HealthPage() {
                     placeholder="130"
                     required
                   />
-                  <span className="text-[11px] text-gray-400 font-semibold">mmHg</span>
+                  <span className="text-[11px] text-gray-400 font-semibold">{t('vitals.bpUnit')}</span>
                 </div>
 
                 <div>
                   <label className="block text-xs font-black text-gray-600 uppercase mb-1">
-                    {t.vitals.diastolic} (नीचे का)
+                    {t('vitals.fieldDiastolic')}
                   </label>
                   <input
                     type="number"
@@ -455,7 +423,7 @@ export default function HealthPage() {
                     placeholder="82"
                     required
                   />
-                  <span className="text-[11px] text-gray-400 font-semibold">mmHg</span>
+                  <span className="text-[11px] text-gray-400 font-semibold">{t('vitals.bpUnit')}</span>
                 </div>
               </div>
             )}
@@ -466,24 +434,22 @@ export default function HealthPage() {
               className="w-full py-4 sm:py-5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-lg sm:text-xl shadow-lg shadow-emerald-600/20 transition flex items-center justify-center gap-2"
             >
               <CheckCircle2 className="w-6 h-6" />
-              <span>{t.vitals.saveBtn}</span>
+              <span>{t('vitals.saveBtn')}</span>
             </button>
           </form>
         </div>
 
-        {/* ------------------------------------------------------------- */}
-        {/* RECHARTS TREND CHART (7-Day Trend + Safe Reference Areas)     */}
-        {/* ------------------------------------------------------------- */}
+        {/* RECHARTS TREND CHART */}
         <div className="bg-white rounded-3xl p-5 sm:p-7 border-2 border-emerald-100 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <TrendingUp className="w-6 h-6 text-emerald-600" />
               <h3 className="text-xl font-black text-gray-900">
-                {t.vitals.trendTitle} ({activeType === 'sugar' ? 'Sugar' : 'BP'})
+                {t('vitals.trendTitle')} ({activeType === 'sugar' ? 'Sugar' : 'BP'})
               </h3>
             </div>
             <span className="text-xs font-bold text-gray-500">
-              {activeType === 'sugar' ? 'लक्ष्य: 70-140 mg/dL' : 'लक्ष्य: <130/80 mmHg'}
+              {activeType === 'sugar' ? t('vitals.targetSugar') : t('vitals.targetBP')}
             </span>
           </div>
 
@@ -506,7 +472,6 @@ export default function HealthPage() {
                 />
                 <Legend wrapperStyle={{ fontSize: 12, paddingTop: 6 }} />
 
-                {/* Safe Range Green Highlight Band */}
                 {activeType === 'sugar' ? (
                   <>
                     <ReferenceArea
@@ -514,12 +479,12 @@ export default function HealthPage() {
                       y2={140}
                       fill="#22c55e"
                       fillOpacity={0.08}
-                      label={{ value: 'Safe Range', position: 'insideTopLeft', fill: '#16a34a', fontSize: 10 }}
+                      label={{ value: t('vitals.chartSafeRange'), position: 'insideTopLeft', fill: '#16a34a', fontSize: 10 }}
                     />
                     <Line
                       type="monotone"
                       dataKey="value"
-                      name="Blood Sugar (mg/dL)"
+                      name={t('vitals.chartSugarSeries')}
                       stroke="#16a34a"
                       strokeWidth={3}
                       dot={{ r: 5, fill: '#16a34a' }}
@@ -533,12 +498,12 @@ export default function HealthPage() {
                       y2={130}
                       fill="#22c55e"
                       fillOpacity={0.08}
-                      label={{ value: 'Normal BP', position: 'insideTopLeft', fill: '#16a34a', fontSize: 10 }}
+                      label={{ value: t('vitals.chartNormalBP'), position: 'insideTopLeft', fill: '#16a34a', fontSize: 10 }}
                     />
                     <Line
                       type="monotone"
                       dataKey="value"
-                      name="Systolic (mmHg)"
+                      name={t('vitals.chartSysSeries')}
                       stroke="#dc2626"
                       strokeWidth={3}
                       dot={{ r: 5, fill: '#dc2626' }}
@@ -546,7 +511,7 @@ export default function HealthPage() {
                     <Line
                       type="monotone"
                       dataKey="secondary"
-                      name="Diastolic (mmHg)"
+                      name={t('vitals.chartDiaSeries')}
                       stroke="#3b82f6"
                       strokeWidth={2}
                       dot={{ r: 4, fill: '#3b82f6' }}
@@ -561,7 +526,7 @@ export default function HealthPage() {
         {/* Recent Readings List */}
         <div className="bg-white rounded-3xl p-5 sm:p-7 border-2 border-emerald-100 shadow-sm space-y-3">
           <h3 className="text-lg font-black text-gray-900">
-            हाल की रीडिंग (Recent History)
+            {t('vitals.recentHistory')}
           </h3>
           <div className="space-y-2.5">
             {readings.slice(0, 5).map((rdg) => {
@@ -582,8 +547,8 @@ export default function HealthPage() {
                     <div className="flex items-center gap-2">
                       <span className="font-black text-gray-900 text-lg">
                         {rdg.type === 'sugar'
-                          ? `${rdg.value_numeric} mg/dL`
-                          : `${rdg.value_numeric}/${rdg.value_secondary || 80} mmHg`}
+                          ? `${formatNumber(rdg.value_numeric)} ${t('vitals.sugarUnit')}`
+                          : `${formatNumber(rdg.value_numeric)}/${formatNumber(rdg.value_secondary || 80)} ${t('vitals.bpUnit')}`}
                       </span>
                       <span
                         className={`text-[11px] font-black uppercase px-2 py-0.5 rounded-full ${
@@ -594,19 +559,19 @@ export default function HealthPage() {
                             : 'bg-emerald-100 text-emerald-800'
                         }`}
                       >
-                        {rdg.risk_level}
+                        {rdg.risk_level === 'high' ? t('common.danger') : rdg.risk_level === 'moderate' ? t('common.warning') : t('common.success')}
                       </span>
                       <span className="text-[11px] text-gray-400 font-semibold">
                         ({rdg.source})
                       </span>
                     </div>
                     <p className="text-xs text-gray-600 font-medium">
-                      {rdg.risk_message || 'Reading logged successfully'}
+                      {rdg.risk_message || t('vitals.savedSuccess')}
                     </p>
                   </div>
 
                   <span className="text-[11px] text-gray-400 font-semibold shrink-0">
-                    {new Date(rdg.logged_at).toLocaleDateString([], {
+                    {formatDate(rdg.logged_at, {
                       month: 'short',
                       day: 'numeric',
                     })}
@@ -623,18 +588,17 @@ export default function HealthPage() {
         isOpen={cameraOpen}
         onClose={() => setCameraOpen(false)}
         onImageCaptured={handleCameraCapture}
-        title="मशीन स्क्रीन की फोटो लें (Snap Device Screen)"
-        description="ग्लूकोमीटर या बीपी मशीन की स्क्रीन के अंकों को फ्रेम में रखें"
+        title={t('vitals.cameraModalTitle')}
+        description={t('vitals.cameraModalDesc')}
       />
 
-      {/* Safety Risk Alert Modal (Triggered by Rule-Based Risk Engine) */}
+      {/* Safety Risk Alert Modal */}
       <RiskAlertModal
         evaluation={activeRiskAlert}
         isOpen={isRiskModalOpen}
         onClose={() => setIsRiskModalOpen(false)}
         patientName={patient?.full_name}
         emergencyPhone={patient?.emergency_contact_phone}
-        language={language}
       />
     </div>
   );

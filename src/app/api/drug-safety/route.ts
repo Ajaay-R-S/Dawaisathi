@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { findLocalInteractions, DANGEROUS_INTERACTIONS } from '@/data/drugInteractions';
-import { Language } from '@/types';
+import { Language } from '@/context/LanguageContext';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { medicines = [], language = 'hi', isDemo = false } = body;
+    const { medicines = [], language = 'en', isDemo = false } = body;
 
     if (!Array.isArray(medicines) || medicines.length === 0) {
       return NextResponse.json({

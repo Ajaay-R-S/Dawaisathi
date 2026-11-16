@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { Flame, CheckCircle2, Award, Calendar } from 'lucide-react';
+import { Flame, Award } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { ScheduleItem } from '@/types';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface AdherenceStreakProps {
   streakCount: number;
@@ -11,6 +12,7 @@ interface AdherenceStreakProps {
 }
 
 export default function AdherenceStreak({ streakCount, schedule }: AdherenceStreakProps) {
+  const { t, formatNumber } = useLanguage();
   const total = schedule.length;
   const takenCount = schedule.filter((s) => s.taken).length;
   const percent = total > 0 ? Math.round((takenCount / total) * 100) : 0;
@@ -42,14 +44,14 @@ export default function AdherenceStreak({ streakCount, schedule }: AdherenceStre
           <div>
             <div className="flex items-center gap-2">
               <span className="text-2xl sm:text-3xl font-black text-gray-900">
-                {streakCount} दिन लगातार
+                {formatNumber(streakCount)} {t('common.daysInARow')}
               </span>
               <span className="text-xs bg-amber-100 text-amber-900 font-black px-2.5 py-0.5 rounded-full border border-amber-300">
-                Streak!
+                {t('common.streak')}
               </span>
             </div>
             <p className="text-xs text-gray-500 font-semibold">
-              आपने समय पर दवा लेने का शानदार रिकॉर्ड बनाया है।
+              {t('common.streakEncouragement')}
             </p>
           </div>
         </div>
@@ -59,10 +61,14 @@ export default function AdherenceStreak({ streakCount, schedule }: AdherenceStre
           <Award className="w-6 h-6 text-emerald-600 shrink-0" />
           <div>
             <span className="text-xs text-emerald-800 font-bold block uppercase tracking-wider">
-              आज की दवाइयां
+              {t('common.todayProgress')}
             </span>
             <span className="text-base font-black text-emerald-950">
-              {takenCount} / {total} ली गई ({percent}%)
+              {t('common.takenCount', {
+                taken: formatNumber(takenCount),
+                total: formatNumber(total),
+                percent: formatNumber(percent),
+              })}
             </span>
           </div>
         </div>
@@ -78,7 +84,11 @@ export default function AdherenceStreak({ streakCount, schedule }: AdherenceStre
         </div>
         <div className="flex justify-between items-center text-[11px] text-gray-400 mt-1.5 font-bold">
           <span>0%</span>
-          <span>{percent === 100 ? '🎉 आज का लक्ष्य पूरा!' : `${total - takenCount} दवा बाकी`}</span>
+          <span>
+            {percent === 100
+              ? t('common.allDoneCelebration')
+              : t('common.remainingCount', { count: formatNumber(total - takenCount) })}
+          </span>
           <span>100%</span>
         </div>
       </div>

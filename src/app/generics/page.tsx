@@ -1,17 +1,17 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Coins, Search, ShoppingBag, ArrowRight, AlertCircle, Calculator, CheckCircle2 } from 'lucide-react';
+import { Search, AlertCircle, Calculator } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import GenericSavingsCard from '@/components/GenericSavingsCard';
 import { GENERIC_MEDICINES_DB } from '@/data/genericMedicines';
 import { getPatientProfile } from '@/lib/supabase';
-import { GenericDrugInfo, Language, PatientProfile } from '@/types';
-import { TRANSLATIONS } from '@/data/translations';
+import { GenericDrugInfo, PatientProfile } from '@/types';
+import { useLanguage } from '@/context/LanguageContext';
 
 export default function GenericsPage() {
+  const { t, formatNumber } = useLanguage();
   const [patient, setPatient] = useState<PatientProfile | null>(null);
-  const [language, setLanguage] = useState<Language>('hi');
   const [isDemoMode, setIsDemoMode] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -23,12 +23,9 @@ export default function GenericsPage() {
     GENERIC_MEDICINES_DB[8], // Pan 40
   ]);
 
-  const t = TRANSLATIONS[language] || TRANSLATIONS.en;
-
   useEffect(() => {
     getPatientProfile().then((p) => {
       setPatient(p);
-      if (p.preferred_language) setLanguage(p.preferred_language);
     });
   }, []);
 
@@ -42,7 +39,6 @@ export default function GenericsPage() {
     );
   });
 
-  // Calculate monthly costs (assuming 1 strip of each per month)
   const totalBrandMonthly = selectedMeds.reduce((acc, m) => acc + m.brandPricePerStrip, 0);
   const totalGenericMonthly = selectedMeds.reduce((acc, m) => acc + m.genericPricePerStrip, 0);
   const monthlySavings = totalBrandMonthly - totalGenericMonthly;
@@ -62,8 +58,6 @@ export default function GenericsPage() {
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
       <Navbar
-        currentLang={language}
-        onLanguageChange={setLanguage}
         isDemoMode={isDemoMode}
         onToggleDemoMode={() => setIsDemoMode(!isDemoMode)}
         emergencyPhone={patient?.emergency_contact_phone}
@@ -74,57 +68,55 @@ export default function GenericsPage() {
         {/* Header */}
         <div className="bg-white rounded-3xl p-5 sm:p-7 border-2 border-emerald-100 shadow-sm space-y-1">
           <span className="text-xs font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-            Feature 3: Jan Aushadhi Generic Alternatives
+            {t('generics.badge')}
           </span>
           <h1 className="text-2xl sm:text-3xl font-black text-gray-900 mt-1">
-            सस्ती जेनेरिक दवा खोजें (Jan Aushadhi Savings)
+            {t('generics.title')}
           </h1>
           <p className="text-sm text-gray-500 font-semibold">
-            ब्रांडेड दवाओं की जगह वही साल्ट वाली जन औषधि दवाएं लेकर 50% से 85% तक पैसे बचाएं।
+            {t('generics.subtitle')}
           </p>
         </div>
 
-        {/* ------------------------------------------------------------- */}
-        {/* MONTHLY SAVINGS CALCULATOR                                    */}
-        {/* ------------------------------------------------------------- */}
+        {/* MONTHLY SAVINGS CALCULATOR */}
         <div className="bg-gradient-to-br from-emerald-600 via-teal-700 to-emerald-800 text-white rounded-3xl p-6 sm:p-8 shadow-xl space-y-5">
           <div className="flex items-center gap-2.5">
             <Calculator className="w-7 h-7 text-emerald-200" />
             <h3 className="text-xl sm:text-2xl font-black">
-              मासिक दवा बचत कैलकुलेटर (Monthly Savings)
+              {t('generics.calcTitle')}
             </h3>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
             <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-sm border border-white/10">
               <span className="text-xs uppercase font-bold text-emerald-200 block">
-                ब्रांडेड दवा का खर्च
+                {t('generics.calcBrandCost')}
               </span>
               <span className="text-2xl sm:text-3xl font-black mt-1 block">
-                ₹{totalBrandMonthly.toFixed(0)}
+                ₹{formatNumber(Math.round(totalBrandMonthly))}
               </span>
-              <span className="text-[11px] text-emerald-100">प्रति माह (Per month)</span>
+              <span className="text-[11px] text-emerald-100">{t('generics.perMonth')}</span>
             </div>
 
             <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-sm border border-white/10">
               <span className="text-xs uppercase font-bold text-emerald-200 block">
-                जन औषधि का खर्च
+                {t('generics.calcGenericCost')}
               </span>
               <span className="text-2xl sm:text-3xl font-black text-amber-300 mt-1 block">
-                ₹{totalGenericMonthly.toFixed(0)}
+                ₹{formatNumber(Math.round(totalGenericMonthly))}
               </span>
-              <span className="text-[11px] text-emerald-100">प्रति माह (Per month)</span>
+              <span className="text-[11px] text-emerald-100">{t('generics.perMonth')}</span>
             </div>
 
             <div className="bg-amber-400 text-amber-950 rounded-2xl p-4 shadow-lg">
               <span className="text-xs uppercase font-black block">
-                आपकी कुल बचत ({overallSavingsPercent}%)
+                {t('generics.calcTotalSavings', { pct: formatNumber(overallSavingsPercent) })}
               </span>
               <span className="text-2xl sm:text-3xl font-black mt-1 block">
-                ₹{monthlySavings.toFixed(0)} / माह
+                ₹{formatNumber(Math.round(monthlySavings))} / {t('generics.perMonth')}
               </span>
               <span className="text-[11px] font-bold block">
-                साल में ₹{yearlySavings.toFixed(0)} की बचत!
+                {t('generics.yearlySavings', { amount: formatNumber(Math.round(yearlySavings)) })}
               </span>
             </div>
           </div>
@@ -132,7 +124,7 @@ export default function GenericsPage() {
           {/* Active List Pills in Calculator */}
           <div className="pt-2 border-t border-white/15">
             <span className="text-xs text-emerald-100 font-bold block mb-2">
-              कैलकुलेटर में शामिल दवाएं ({selectedMeds.length}):
+              {t('generics.medsInCalc', { count: formatNumber(selectedMeds.length) })}
             </span>
             <div className="flex flex-wrap gap-2">
               {selectedMeds.map((med) => (
@@ -142,7 +134,7 @@ export default function GenericsPage() {
                   className="bg-white/20 hover:bg-white/30 text-white px-3 py-1 rounded-full text-xs font-bold transition flex items-center gap-1.5"
                 >
                   <span>{med.brandName}</span>
-                  <span className="text-amber-300">(-{med.savingsPercent}%)</span>
+                  <span className="text-amber-300">(-{formatNumber(med.savingsPercent)}%)</span>
                   <span>✕</span>
                 </button>
               ))}
@@ -150,16 +142,14 @@ export default function GenericsPage() {
           </div>
         </div>
 
-        {/* ------------------------------------------------------------- */}
-        {/* SEARCH & DATABASE LIST                                        */}
-        {/* ------------------------------------------------------------- */}
+        {/* SEARCH & DATABASE LIST */}
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <h3 className="text-xl font-black text-gray-900">
-              दवा खोजें (Search Database)
+              {t('generics.searchTitle')}
             </h3>
             <span className="text-xs font-bold text-gray-500">
-              {filteredMedicines.length} दवाएं उपलब्ध
+              {t('generics.availableCount', { count: formatNumber(filteredMedicines.length) })}
             </span>
           </div>
 
@@ -169,7 +159,7 @@ export default function GenericsPage() {
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="ब्रांड या सॉल्ट का नाम लिखें (उदा. Augmentin, Telma, Pan 40, Glycomet)..."
+              placeholder={t('generics.searchPlaceholder')}
               className="w-full pl-12 pr-4 py-3.5 rounded-2xl border-2 border-gray-200 text-base font-bold focus:border-emerald-500 focus:outline-none bg-white shadow-sm"
             />
           </div>
@@ -188,8 +178,8 @@ export default function GenericsPage() {
                   }`}
                 >
                   {selectedMeds.some((m) => m.brandName === item.brandName)
-                    ? '✓ कैलकुलेटर में जुड़ा है'
-                    : '+ कैलकुलेटर में जोड़ें'}
+                    ? t('generics.addedToCalc')
+                    : t('generics.addToCalc')}
                 </button>
               </div>
             ))}
@@ -200,11 +190,8 @@ export default function GenericsPage() {
         <div className="p-4 bg-amber-50 border-2 border-amber-200 rounded-2xl flex items-start gap-3 text-xs text-amber-900 font-semibold leading-relaxed">
           <AlertCircle className="w-5 h-5 shrink-0 text-amber-600 mt-0.5" />
           <div>
-            <p className="font-bold">सख्त नियामक एवं क्लिनिकल सलाह (Clinical Notice):</p>
-            <p>
-              जेनेरिक दवाइयों में वही सक्रिय साल्ट (Active Pharmaceutical Ingredient) होता है जो ब्रांडेड में होता है।
-              लेकिन खुराक और ब्रांड बदलने से पहले हमेशा अपने डॉक्टर या नजदीकी फार्मासिस्ट से परामर्श अवश्य लें।
-            </p>
+            <p className="font-bold">{t('common.clinicalNotice')}:</p>
+            <p>{t('generics.cardDisclaimer')}</p>
           </div>
         </div>
       </main>
